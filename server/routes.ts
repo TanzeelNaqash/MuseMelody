@@ -438,7 +438,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           console.warn('[STREAM] No stream available for id:', youtubeId, 'last piped:', uma.getLastSuccessfulInstance('piped') || 'unknown', 'last invidious:', uma.getLastSuccessfulInstance('invidious') || 'unknown');
         } catch {}
-        return res.status(404).json({ message: 'No stream available' });
+        return res.status(404).json({ 
+          message: 'No stream available',
+          error: 'All streaming sources failed. Please try again later or try switching location using VPN.',
+        });
       }
 
       const proxiedUrl = `/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(resolved.url)}`;
@@ -451,7 +454,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (e: any) {
       console.error('Resolve stream failed:', e);
-      res.status(500).json({ message: 'Failed to resolve stream' });
+      res.status(500).json({ 
+        message: 'Failed to resolve stream',
+        error: 'Unable to load stream. Please try again later or try switching location using VPN.',
+      });
     }
   });
 
@@ -468,26 +474,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // If decoding fails, use as-is
       }
 
-      // Build headers for Google Video
+      // Build headers for Google Video - must match browser exactly
       const headers: Record<string, string> = {
         // Use a proper browser User-Agent (Google blocks non-browser UAs)
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'identity', // Don't compress, we're streaming
         'Referer': 'https://www.youtube.com/',
         'Origin': 'https://www.youtube.com',
+        'Connection': 'keep-alive',
       };
 
       // Forward Range header if present (critical for streaming)
+      // Only forward if browser sent it - don't add default Range header
+      // as some servers reject unexpected Range requests
       const rangeHeader = req.headers['range'] || req.headers['Range'];
       if (rangeHeader) {
         headers['Range'] = String(rangeHeader);
       }
 
-      // Stream with proper headers
+      // Stream with proper headers and redirect handling
       const upstream = await fetch(src, {
         headers,
+        redirect: 'follow',
+        // Don't follow redirects automatically, but handle them
       });
+
+      // Handle 403 errors
+      if (upstream.status === 403) {
+        console.error('[PROXY] 403 Forbidden for URL:', src.substring(0, 100) + '...');
+        console.error('[PROXY] Response headers:', Object.fromEntries(upstream.headers.entries()));
+        return res.status(403).json({ 
+          message: 'Access denied by video provider',
+          error: 'Unable to access stream. Please try again later or try switching location using VPN.',
+        });
+      }
 
       // Forward status code
       res.status(upstream.status);
@@ -510,13 +532,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Headers', 'Range');
+      res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
 
       // Stream the response body
       if (!upstream.body) return res.end();
       (upstream.body as any).pipe(res);
     } catch (e: any) {
       console.error('Proxy stream failed:', e);
-      res.status(500).end();
+      if (e.code === 'ETIMEDOUT' || e.code === 'ECONNRESET') {
+        return res.status(504).json({ 
+          message: 'Stream timeout',
+          error: 'Connection to video provider timed out. Please try again later.',
+        });
+      }
+      res.status(500).json({ 
+        message: 'Proxy error',
+        error: 'Unable to proxy stream. Please try again later.',
+      });
     }
   });
 
