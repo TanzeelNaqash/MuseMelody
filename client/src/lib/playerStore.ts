@@ -22,6 +22,12 @@ export type Track = SharedTrack & {
   author?: string
   duration?: number | string
   channelUrl?: string
+  /**
+   * Stream source and instance used to fetch this track.
+   * Used to maintain consistency when resolving streams.
+   */
+  streamSource?: 'piped' | 'invidious'
+  streamInstance?: string | null
 }
 
 export interface ApiConfig {

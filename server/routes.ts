@@ -5,8 +5,9 @@ import { setupAuthRoutes, authenticateToken, authenticateWithGuest } from "./aut
 import multer from "multer";
 import path from "path";
 import { mkdirSync, existsSync } from "fs";
-import { resolveBestAudioUrl } from "./streamResolver";
-import fetch from 'node-fetch';
+import { resolveBestAudioUrl, clearResolvedStreamCache } from "./streamResolver";
+import { request } from "undici";
+import { Readable } from "stream";
 import { uma } from './umaManager';
 
 const LYRICS_API_URL = "https://api.lyrics.ovh/v1";
@@ -22,6 +23,33 @@ const TRENDING_QUERIES: Array<{ query: string; weight: number }> = [
 ];
 
 const YOUTUBE_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
+
+// Map YouTube itag to MIME type for audio streams
+function getMimeTypeFromItag(itag: string | null): string {
+  if (!itag) return 'audio/webm'; // Default fallback
+  
+  const itagNum = parseInt(itag, 10);
+  
+  // Audio itags mapping
+  const audioItags: Record<number, string> = {
+    // MP4/AAC audio
+    140: 'audio/mp4', // AAC 128kbps
+    141: 'audio/mp4', // AAC 256kbps
+    256: 'audio/mp4', // AAC
+    258: 'audio/mp4', // AAC
+    325: 'audio/mp4', // AAC
+    328: 'audio/mp4', // AAC
+    
+    // WebM/Opus audio
+    249: 'audio/webm', // Opus 50kbps
+    250: 'audio/webm', // Opus 70kbps
+    251: 'audio/webm', // Opus 160kbps
+    171: 'audio/webm', // WebM audio (Opus)
+    172: 'audio/webm', // WebM audio (Opus)
+  };
+  
+  return audioItags[itagNum] || 'audio/webm';
+}
 
 function parseYouTubeId(value: string | undefined | null): string | null {
   if (!value) return null;
@@ -596,13 +624,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const proxiedUrl = `/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(resolved.url)}`;
+      // Get the instance that was used to fetch this stream
+      const usedInstance = uma.getLastSuccessfulInstance(resolved.source);
+      const proxiedUrl = `/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(resolved.url)}&source=${resolved.source}${usedInstance ? `&instance=${encodeURIComponent(usedInstance)}` : ''}`;
       res.json({
         url: resolved.url,
         proxiedUrl,
         manifestUrl: resolved.manifestUrl,
         mimeType: resolved.mimeType,
         origin: resolved.source,
+        instance: usedInstance,
       });
     } catch (e: any) {
       console.error('Resolve stream failed:', e);
@@ -615,122 +646,265 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Proxy the audio stream through our server (no CORS on client)
   app.get('/api/streams/:id/proxy', authenticateWithGuest, async (req, res) => {
+    let src = req.query.src as string;
+    if (!src) return res.status(400).json({ message: 'Missing src' });
+
+    const youtubeId = req.params.id;
+    const source = (req.query.source as string)?.toLowerCase() as 'piped' | 'invidious' | undefined;
+    const instance = req.query.instance as string | undefined;
+
+    // Decode the URL (it comes encoded from query params)
     try {
-      let src = req.query.src as string;
-      if (!src) return res.status(400).json({ message: 'Missing src' });
+      src = decodeURIComponent(src);
+    } catch {
+      // If decoding fails, use as-is
+    }
 
-      // Decode the URL (it comes encoded from query params)
-      try {
-        src = decodeURIComponent(src);
-      } catch {
-        // If decoding fails, use as-is
-      }
-
+    // Helper function to attempt proxying a stream URL using undici
+    const attemptProxy = async (streamUrl: string): Promise<{ success: boolean; response?: any; error?: any; needsContentTypeOverride?: boolean }> => {
       // Build headers for Google Video - must match browser exactly
-      // Google Video checks Origin, Referer, and other headers strictly
       const headers: Record<string, string> = {
-        // Use a proper browser User-Agent (Google blocks non-browser UAs)
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        // More specific Accept header for audio streams
-        'Accept': 'audio/webm,audio/ogg,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'identity', // Don't compress, we're streaming
-        // Critical: Google Video checks these headers
-        'Referer': 'https://www.youtube.com/',
-        'Origin': 'https://www.youtube.com',
-        'Connection': 'keep-alive',
-        // Additional headers that browsers send
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'accept': 'audio/webm,audio/ogg,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5',
+        'accept-language': 'en-US,en;q=0.9',
+        'accept-encoding': 'identity', // Don't compress, we're streaming
+        'referer': 'https://www.youtube.com/',
+        'origin': 'https://www.youtube.com',
+        'cache-control': 'no-cache',
+        'pragma': 'no-cache',
+        'sec-fetch-dest': 'audio',
+        'sec-fetch-mode': 'no-cors',
+        'sec-fetch-site': 'cross-site',
       };
 
       // Forward Range header if present (critical for streaming)
-      // Only forward if browser sent it - don't add default Range header
-      // as some servers reject unexpected Range requests
       const rangeHeader = req.headers['range'] || req.headers['Range'];
       if (rangeHeader) {
-        headers['Range'] = String(rangeHeader);
+        headers['range'] = String(rangeHeader);
       }
 
-      // Stream with proper headers and redirect handling
-      // Important: Don't modify the URL - Google validates the signature
-      // Set up timeout to avoid hanging requests
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-      
-      const upstream = await fetch(src, {
-        headers,
-        redirect: 'follow',
-        signal: controller.signal,
-      }).finally(() => {
-        clearTimeout(timeoutId);
-      });
+      try {
+        // Use undici's request method which returns a proper Node.js stream
+        const { statusCode, headers: responseHeaders, body } = await request(streamUrl, {
+          headers,
+          method: 'GET',
+          maxRedirections: 5,
+        });
 
-      // Handle 403 errors - often means expired URL signature or IP blocking
-      if (upstream.status === 403) {
-        console.error('[PROXY] 403 Forbidden for URL:', src.substring(0, 100) + '...');
-        console.error('[PROXY] Response headers:', Object.fromEntries(upstream.headers.entries()));
+        // Early detection: Check status and content-type
+        const contentType = responseHeaders['content-type'] || '';
+        const isTextPlain = String(contentType).toLowerCase().includes('text/plain');
+        const isGoogleVideo = streamUrl.includes('googlevideo.com');
         
-        // Check if URL might be expired by looking at expire parameter
-        const urlObj = new URL(src);
-        const expireParam = urlObj.searchParams.get('expire');
-        if (expireParam) {
-          const expireTime = parseInt(expireParam, 10);
-          const currentTime = Math.floor(Date.now() / 1000);
-          if (expireTime < currentTime) {
-            console.error('[PROXY] URL expired:', { expireTime, currentTime, diff: currentTime - expireTime });
-            return res.status(403).json({ 
-              message: 'Stream URL expired',
-              error: 'The stream URL has expired. Please refresh and try again.',
-              expired: true,
-            });
-          }
+        // If 403, abort early and clean up
+        if (statusCode === 403) {
+          // Add error handler to prevent unhandled errors
+          body.on('error', () => {
+            // Silently handle errors when cleaning up
+          });
+          
+          // Drain the stream instead of destroying to avoid unhandled errors
+          // This consumes the body without storing it
+          body.resume();
+          
+          // Set a timeout to destroy after draining
+          setTimeout(() => {
+            try {
+              if (!body.destroyed) {
+                body.destroy();
+              }
+            } catch (e) {
+              // Ignore destroy errors
+            }
+          }, 1000);
+          
+          return { success: false, error: '403 Forbidden' };
         }
         
+        // Add error handler for successful responses too
+        body.on('error', () => {
+          // Silently handle stream errors - they'll be caught in the main handler
+        });
+        
+        // If text/plain from googlevideo.com with 200 status, override content-type
+        if (statusCode === 200 && isTextPlain && isGoogleVideo) {
+          return { 
+            success: true, 
+            response: { status: statusCode, headers: responseHeaders, body }, 
+            needsContentTypeOverride: true 
+          };
+        }
+
+        return { 
+          success: true, 
+          response: { status: statusCode, headers: responseHeaders, body } 
+        };
+      } catch (error: any) {
+        return { success: false, error: error.message || error };
+      }
+    };
+
+    // Try the provided URL first
+    let result = await attemptProxy(src);
+    
+    // If failed, try re-fetching from the same source
+    if (!result.success && source) {
+      console.log(`[PROXY] Initial attempt failed, clearing cache and re-fetching from ${source}...`);
+      clearResolvedStreamCache(youtubeId);
+      try {
+        const resolved = await resolveBestAudioUrl(youtubeId, source, instance);
+        if (resolved?.url && resolved.url !== src) {
+          console.log(`[PROXY] Got new URL from ${source}, attempting proxy...`);
+          result = await attemptProxy(resolved.url);
+          if (result.success) {
+            src = resolved.url;
+          }
+        }
+      } catch (error) {
+        console.warn(`[PROXY] Re-fetch from ${source} failed:`, error);
+      }
+    }
+
+    // If still failed, try alternative sources
+    if (!result.success && source) {
+      const altSource = source === 'piped' ? 'invidious' : 'piped';
+      console.log(`[PROXY] Trying alternative source: ${altSource}...`);
+      clearResolvedStreamCache(youtubeId);
+      try {
+        const resolved = await resolveBestAudioUrl(youtubeId, altSource);
+        if (resolved?.url) {
+          result = await attemptProxy(resolved.url);
+          if (result.success) {
+            src = resolved.url;
+          }
+        }
+      } catch (error) {
+        console.warn(`[PROXY] Alternative source ${altSource} failed:`, error);
+      }
+    }
+
+    // If all attempts failed, return error
+    if (!result.success || !result.response) {
+      console.error('[PROXY] All attempts failed:', {
+        success: result.success,
+        error: result.error,
+        hasResponse: !!result.response,
+        status: result.response?.status,
+        youtubeId,
+        source,
+        instance,
+      });
+      
+      if (result.response?.status === 403) {
         return res.status(403).json({ 
           message: 'Access denied by video provider',
           error: 'Unable to access stream. Please try again later or try switching location using VPN.',
         });
       }
-
-      // Forward status code
-      res.status(upstream.status);
-
-      // Forward relevant response headers
-      upstream.headers.forEach((value, key) => {
-        const lowerKey = key.toLowerCase();
-        if ([
-          'content-type',
-          'content-length',
-          'accept-ranges',
-          'content-range',
-          'etag',
-          'last-modified',
-          'cache-control'
-        ].includes(lowerKey)) {
-          res.setHeader(key, value);
-        }
-      });
-
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Headers', 'Range');
-      res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
-
-      // Stream the response body
-      if (!upstream.body) return res.end();
-      (upstream.body as any).pipe(res);
-    } catch (e: any) {
-      console.error('Proxy stream failed:', e);
-      if (e.code === 'ETIMEDOUT' || e.code === 'ECONNRESET') {
-        return res.status(504).json({ 
-          message: 'Stream timeout',
-          error: 'Connection to video provider timed out. Please try again later.',
-        });
-      }
-      res.status(500).json({ 
+      
+      return res.status(500).json({ 
         message: 'Proxy error',
         error: 'Unable to proxy stream. Please try again later.',
       });
+    }
+
+    const upstream = result.response;
+
+    // Forward status code
+    res.status(upstream.status);
+
+    // Handle content-type override for text/plain responses from googlevideo.com
+    let contentType = String(upstream.headers['content-type'] || '');
+    if (result.needsContentTypeOverride && src.includes('googlevideo.com')) {
+      try {
+        const urlObj = new URL(src);
+        const itag = urlObj.searchParams.get('itag');
+        const correctMimeType = getMimeTypeFromItag(itag);
+        console.warn(`[PROXY] googlevideo.com returned text/plain → overriding to ${correctMimeType} (itag: ${itag || 'unknown'})`);
+        contentType = correctMimeType;
+      } catch (error) {
+        console.warn('[PROXY] Failed to parse URL for itag, using default audio/webm');
+        contentType = 'audio/webm';
+      }
+    }
+
+    // Forward relevant response headers
+    const headersToForward = [
+      'content-length',
+      'accept-ranges',
+      'content-range',
+      'etag',
+      'last-modified',
+      'cache-control'
+    ];
+
+    Object.entries(upstream.headers).forEach(([key, value]: [string, any]) => {
+      const lowerKey = key.toLowerCase();
+      if (headersToForward.includes(lowerKey)) {
+        res.setHeader(key, String(value));
+      }
+    });
+
+    // Set content-type (overridden if needed)
+    res.setHeader('Content-Type', contentType);
+    
+    // Handle Content-Range for partial content (206)
+    if (upstream.status === 206) {
+      const contentRange = upstream.headers['content-range'];
+      if (contentRange) {
+        res.setHeader('Content-Range', String(contentRange));
+      }
+    }
+
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Range');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
+
+    // Stream the response body using undici's body stream (which is a Node.js Readable stream)
+    try {
+      if (!upstream.body) {
+        console.warn('[PROXY] No body in response');
+        return res.end();
+      }
+
+      // undici's request returns body as a Node.js Readable stream
+      const bodyStream = upstream.body as Readable;
+      
+      // Pipe the stream to the response
+      bodyStream.pipe(res);
+      
+      // Handle stream errors
+      bodyStream.on('error', (streamError: any) => {
+        console.error('[PROXY] Stream error:', streamError);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            message: 'Stream error',
+            error: 'Error while streaming content.',
+          });
+        } else {
+          res.end();
+        }
+      });
+
+      // Handle response end/close
+      res.on('close', () => {
+        if (bodyStream && typeof bodyStream.destroy === 'function') {
+          try {
+            bodyStream.destroy();
+          } catch (destroyError) {
+            // Ignore destroy errors
+          }
+        }
+      });
+    } catch (streamError: any) {
+      console.error('[PROXY] Failed to pipe stream:', streamError);
+      if (!res.headersSent) {
+        return res.status(500).json({ 
+          message: 'Stream error',
+          error: 'Failed to stream content.',
+        });
+      }
+      res.end();
     }
   });
 

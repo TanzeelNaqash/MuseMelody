@@ -15,11 +15,19 @@ export interface ResolvedStream {
 
 export async function getBestAudioStreamUrl(
   youtubeId: string,
+  options?: {
+    source?: 'piped' | 'invidious';
+    instance?: string | null;
+  }
 ): Promise<ResolvedStream | null> {
+  // Priority: 1. Options passed directly, 2. Stored preference, 3. None
   const preference = getStreamPreference(youtubeId);
+  const source = options?.source ?? preference?.source;
+  const instance = options?.instance ?? preference?.instance;
+  
   const params = new URLSearchParams();
-  if (preference?.source) params.set('source', preference.source);
-  if (preference?.instance) params.set('instance', preference.instance);
+  if (source) params.set('source', source);
+  if (instance) params.set('instance', instance);
   const query = params.toString();
   const endpoint = `${API_URL}/api/streams/${encodeURIComponent(youtubeId)}/best${query ? `?${query}` : ''}`;
 

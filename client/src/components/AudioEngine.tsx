@@ -518,7 +518,15 @@ export function AudioEngine() {
       if (currentTrack.source === "youtube" && currentTrack.youtubeId) {
         try {
           setIsLoadingStream(true);
-          const info = await getBestAudioStreamUrl(currentTrack.youtubeId);
+          // Use track's source/instance if available (from trending/search), otherwise use stored preference
+          const trackWithSource = currentTrack as typeof currentTrack & { 
+            streamSource?: 'piped' | 'invidious'; 
+            streamInstance?: string | null;
+          };
+          const info = await getBestAudioStreamUrl(currentTrack.youtubeId, {
+            source: trackWithSource.streamSource,
+            instance: trackWithSource.streamInstance,
+          });
           if (cancelled) {
             setIsLoadingStream(false);
             return;

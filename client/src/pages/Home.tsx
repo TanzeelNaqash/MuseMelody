@@ -100,6 +100,9 @@ export default function Home() {
       thumbnail: result.thumbnailUrl,
       duration: result.duration,
       source: 'youtube',
+      // Preserve stream source/instance for consistent stream resolution
+      streamSource: result.streamSource,
+      streamInstance: result.streamInstance,
     };
     if (result.streamSource) {
       rememberStreamPreference(result.id, result.streamSource, result.streamInstance);
