@@ -661,7 +661,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     // Helper function to attempt proxying a stream URL using undici
-    const attemptProxy = async (streamUrl: string): Promise<{ success: boolean; response?: any; error?: any; needsContentTypeOverride?: boolean }> => {
+    const attemptProxy = async (streamUrl: string): Promise<{ success: boolean; response?: any; error?: any; statusCode?: number; needsContentTypeOverride?: boolean }> => {
       // Build headers for Google Video - must match browser exactly
       const headers: Record<string, string> = {
         'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -718,7 +718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           }, 1000);
           
-          return { success: false, error: '403 Forbidden' };
+          return { success: false, error: '403 Forbidden', statusCode: 403 };
         }
         
         // Add error handler for successful responses too
@@ -740,7 +740,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           response: { status: statusCode, headers: responseHeaders, body } 
         };
       } catch (error: any) {
-        return { success: false, error: error.message || error };
+        // Check if error has status code
+        const statusCode = error.statusCode || error.status || (error.code === 'ECONNREFUSED' ? 503 : undefined);
+        return { success: false, error: error.message || error, statusCode };
       }
     };
 
@@ -788,6 +790,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('[PROXY] All attempts failed:', {
         success: result.success,
         error: result.error,
+        statusCode: result.statusCode,
         hasResponse: !!result.response,
         status: result.response?.status,
         youtubeId,
@@ -795,10 +798,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         instance,
       });
       
-      if (result.response?.status === 403) {
+      // Check for 403 errors from statusCode or response status
+      if (result.statusCode === 403 || result.response?.status === 403) {
         return res.status(403).json({ 
           message: 'Access denied by video provider',
-          error: 'Unable to access stream. Please try again later or try switching location using VPN.',
+          error: 'Unable to access stream. The video provider has blocked access. Please try again later or try switching location using VPN.',
+        });
+      }
+      
+      // Check for other specific HTTP errors
+      if (result.statusCode && result.statusCode >= 400 && result.statusCode < 500) {
+        return res.status(result.statusCode).json({ 
+          message: 'Stream access error',
+          error: result.error || 'Unable to access stream. Please try again later.',
         });
       }
       
@@ -1073,6 +1085,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching history:", error);
       res.status(500).json({ message: "Failed to fetch history" });
+    }
+  });
+
+  // Clear listening history
+  app.delete('/api/history', authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      await storage.clearHistory(userId);
+      res.json({ message: 'History cleared successfully' });
+    } catch (error) {
+      console.error("Error clearing history:", error);
+      res.status(500).json({ message: "Failed to clear history" });
+    }
+  });
+
+  // Reset user data (clear history, playlists, uploads)
+  app.post('/api/reset', authenticateToken, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { clearHistory: clearHist, clearPlaylists, clearUploads } = req.body;
+
+      if (clearHist) {
+        await storage.clearHistory(userId);
+      }
+
+      if (clearPlaylists) {
+        const userPlaylists = await storage.getPlaylistsByUser(userId);
+        for (const playlist of userPlaylists) {
+          await storage.deletePlaylist(playlist.id);
+        }
+      }
+
+      if (clearUploads) {
+        const userUploads = await storage.getUploadedFiles(userId);
+        for (const file of userUploads) {
+          await storage.deleteUploadedFile(file.id);
+        }
+      }
+
+      res.json({ message: 'Data reset successfully' });
+    } catch (error) {
+      console.error("Error resetting data:", error);
+      res.status(500).json({ message: "Failed to reset data" });
     }
   });
 
