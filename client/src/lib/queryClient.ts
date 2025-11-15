@@ -12,9 +12,19 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5001";
+  const target =
+    /^https?:\/\//i.test(url) ? url : `${API_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  const token = localStorage.getItem("auth_token") || undefined;
+
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(target, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,8 +39,16 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5001";
+    const token = localStorage.getItem("auth_token") || undefined;
+    const path = queryKey.join("/") as string;
+    const target = /^https?:\/\//i.test(path) ? path : `${API_URL}${path.startsWith("/") ? "" : "/"}${path}`;
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    const res = await fetch(target, {
       credentials: "include",
+      headers,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

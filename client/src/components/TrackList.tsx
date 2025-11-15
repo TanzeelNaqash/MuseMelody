@@ -1,4 +1,4 @@
-import { Play, Plus, MoreVertical } from "lucide-react";
+import { Play, Plus, MoreVertical, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -7,6 +7,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Track } from "@shared/schema";
+import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { addToFavorites, removeFromFavorites, isFavorite, getCollectionNames, addTrackToCollection } from "@/lib/libraryBridge";
 
 interface TrackListProps {
   tracks: Track[];
@@ -17,11 +20,41 @@ interface TrackListProps {
 }
 
 export function TrackList({ tracks, onPlay, onAddToQueue, onAddToPlaylist, showIndex = true }: TrackListProps) {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [playlists, setPlaylists] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Load favorites status for all tracks
+    const favSet = new Set<string>();
+    tracks.forEach(track => {
+      if (isFavorite(track.youtubeId || track.id)) {
+        favSet.add(track.youtubeId || track.id);
+      }
+    });
+    setFavorites(favSet);
+    setPlaylists(getCollectionNames());
+  }, [tracks]);
+
   const formatDuration = (seconds?: number) => {
     if (!seconds) return '--:--';
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleToggleFavorite = (track: Track) => {
+    const trackId = track.youtubeId || track.id;
+    if (favorites.has(trackId)) {
+      removeFromFavorites(trackId);
+      setFavorites(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(trackId);
+        return newSet;
+      });
+    } else {
+      addToFavorites(track);
+      setFavorites(prev => new Set(prev).add(trackId));
+    }
   };
 
   return (
@@ -72,6 +105,16 @@ export function TrackList({ tracks, onPlay, onAddToQueue, onAddToPlaylist, showI
 
           {/* Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => handleToggleFavorite(track)}
+              className={cn("h-8 w-8", favorites.has(track.youtubeId || track.id) && "text-primary")}
+              data-testid={`button-favorite-${track.id}`}
+            >
+              <Heart className={cn("h-4 w-4", favorites.has(track.youtubeId || track.id) && "fill-current")} />
+            </Button>
+            
             {onAddToQueue && (
               <Button
                 size="icon"
@@ -104,6 +147,14 @@ export function TrackList({ tracks, onPlay, onAddToQueue, onAddToPlaylist, showI
                     Add to Playlist
                   </DropdownMenuItem>
                 )}
+                {playlists.map((playlistName) => (
+                  <DropdownMenuItem 
+                    key={playlistName}
+                    onClick={() => addTrackToCollection(playlistName, track)}
+                  >
+                    Add to {playlistName}
+                  </DropdownMenuItem>
+                ))}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

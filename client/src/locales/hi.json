@@ -1,0 +1,178 @@
+{
+    "common": {
+      "search": "खोजें",
+      "play": "चलाएं",
+      "pause": "रोकें",
+      "stop": "बंद करें",
+      "next": "अगला",
+      "previous": "पिछला",
+      "shuffle": "मिश्रित चलाएं",
+      "repeat": "दोहराएं",
+      "volume": "आवाज़",
+      "loading": "लोड हो रहा है...",
+      "error": "त्रुटि",
+      "success": "सफलता",
+      "cancel": "रद्द करें",
+      "save": "सहेजें",
+      "delete": "हटाएं",
+      "edit": "संपादित करें",
+      "close": "बंद करें",
+      "open": "खोलें",
+      "back": "वापस",
+      "actions": "क्रियाएं",
+      "done": "पूर्ण",
+      "yes": "हाँ",
+      "no": "नहीं"
+    },
+    "navigation": {
+      "home": "होम",
+      "search": "खोजें",
+      "library": "लाइब्रेरी",
+      "playlists": "प्लेलिस्ट",
+      "localFiles": "स्थानीय फ़ाइलें",
+      "downloads": "डाउनलोड",
+      "createPlaylist": "नई प्लेलिस्ट बनाएं",
+      "uploadMusic": "संगीत अपलोड करें",
+      "queue": "कतार",
+      "lyrics": "गीत के बोल"
+    },
+    "home": {
+      "title": "अपना संगीत खोजें",
+      "subtitle": "YouTube पर लाखों गाने खोजें",
+      "trendingNow": "ट्रेंडिंग",
+      "curatedForYou": "आपके लिए चुना गया",
+      "continueListening": "सुनना जारी रखें",
+      "basedOnHistory": "आपकी सुनने की पसंद पर आधारित",
+      "recentlyPlayed": "आपके हाल ही में चलाए गए गाने यहाँ दिखेंगे",
+      "startPlaying": "अपना इतिहास देखने के लिए संगीत चलाना शुरू करें",
+      "noTrendingTracks": "कोई ट्रेंडिंग गाने उपलब्ध नहीं हैं",
+      "tryAgainLater": "नई ट्रेंड्स देखने के लिए जल्द वापस आएं"
+    },
+    "search": {
+      "placeholder": "गाने, कलाकार या एल्बम खोजें...",
+      "results": "परिणाम",
+      "noResults": "कोई परिणाम नहीं मिला",
+      "tryDifferent": "कोई और शब्द आज़माएं",
+      "searching": "खोज जारी है...",
+      "quickAccess": "त्वरित पहुँच",
+      "recentSearches": "हाल की खोजें",
+      "trendingNow": "ट्रेंडिंग",
+      "newReleases": "नए रिलीज़",
+      "hipHop": "हिप हॉप",
+      "popMusic": "पॉप संगीत",
+      "rock": "रॉक",
+      "electronic": "इलेक्ट्रॉनिक",
+      "classical": "शास्त्रीय",
+      "jazz": "जैज़",
+      "keepTyping": "खोजने के लिए टाइप करते रहें...",
+      "resultsFound": "परिणाम मिले"
+    },
+    "player": {
+      "nowPlaying": "अभी चल रहा है",
+      "upNext": "अगला",
+      "addToQueue": "कतार में जोड़ें",
+      "removeFromQueue": "कतार से हटाएं",
+      "addToPlaylist": "प्लेलिस्ट में जोड़ें",
+      "download": "डाउनलोड करें",
+      "share": "साझा करें",
+      "like": "पसंद करें",
+      "unlike": "नापसंद करें",
+      "duration": "अवधि",
+      "video": "वीडियो"
+    },
+    "library": {
+      "title": "आपकी लाइब्रेरी",
+      "playlists": "प्लेलिस्ट",
+      "localFiles": "स्थानीय फ़ाइलें",
+      "downloads": "डाउनलोड",
+      "empty": "आपकी लाइब्रेरी खाली है",
+      "startAdding": "संगीत जोड़ना शुरू करें ताकि आप इसे यहाँ देख सकें"
+    },
+    "playlist": {
+      "createNew": "नई प्लेलिस्ट बनाएं",
+      "playlistName": "प्लेलिस्ट का नाम",
+      "description": "विवरण",
+      "public": "सार्वजनिक",
+      "private": "निजी",
+      "create": "बनाएं",
+      "edit": "संपादित करें",
+      "delete": "हटाएं",
+      "addSongs": "गाने जोड़ें",
+      "removeSong": "गाना हटाएं",
+      "songs": "गाने",
+      "duration": "अवधि",
+      "createdBy": "द्वारा बनाया गया"
+    },
+    "upload": {
+      "title": "संगीत अपलोड करें",
+      "selectFiles": "ऑडियो फ़ाइलें चुनें",
+      "dragDrop": "ऑडियो फ़ाइलें यहाँ खींचें या क्लिक करके चुनें",
+      "supportedFormats": "समर्थित प्रारूप: MP3, WAV, FLAC, AAC",
+      "maxSize": "अधिकतम फ़ाइल आकार: 50MB",
+      "uploading": "अपलोड हो रहा है...",
+      "uploadSuccess": "अपलोड सफल",
+      "uploadError": "अपलोड विफल"
+    },
+    "auth": {
+      "signIn": "साइन इन करें",
+      "signUp": "साइन अप करें",
+      "signOut": "साइन आउट करें",
+      "email": "ईमेल",
+      "password": "पासवर्ड",
+      "confirmPassword": "पासवर्ड की पुष्टि करें",
+      "forgotPassword": "पासवर्ड भूल गए?",
+      "dontHaveAccount": "क्या आपका खाता नहीं है?",
+      "alreadyHaveAccount": "क्या आपका खाता पहले से है?",
+      "continueAsGuest": "मेहमान के रूप में जारी रखें",
+      "signInWithGoogle": "Google से साइन इन करें",
+      "welcome": "AeroGroove में आपका स्वागत है",
+      "welcomeSubtitle": "आपका संगीत स्ट्रीमिंग प्लेटफ़ॉर्म"
+    },
+
+    
+
+    "profile": {
+      "profile": "प्रोफ़ाइल",
+      "editProfile": "प्रोफ़ाइल संपादित करें",
+      "deleteProfile": "प्रोफ़ाइल हटाएं",
+      "logout": "लॉग आउट"
+    },
+    "logout": {
+      "logout": "लॉग आउट"
+    },
+
+
+    "settings": {
+      "settings": "सेटिंग्स",
+      "language": "भाषा",
+      "theme": "थीम",
+      "light": "हल्का",
+      "dark": "गहरा",
+      "system": "सिस्टम",
+      "audio": "ऑडियो",
+      "quality": "गुणवत्ता",
+      "high": "उच्च",
+      "medium": "मध्यम",
+      "low": "निम्न",
+      "notifications": "सूचनाएँ",
+      "enableNotifications": "सूचनाएँ सक्षम करें",
+      "about": "के बारे में",
+      "version": "संस्करण",
+      "privacy": "गोपनीयता नीति",
+      "terms": "सेवा की शर्तें"
+    },
+    "languages": {
+      "en": "English",
+      "es": "Español",
+      "fr": "Français",
+      "de": "Deutsch",
+      "it": "Italiano",
+      "hi": "हिन्दी",
+      "ur": "اردو",
+      "ja": "日本語",
+      "ko": "한국어",
+      "zh": "中文",
+      "ar": "العربية"
+    }
+  }
+  

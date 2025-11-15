@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useParams, useRouter } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Play, Plus, MoreVertical, ArrowLeft, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ import {
 
 export default function PlaylistDetail() {
   const { id } = useParams<{ id: string }>();
-  const [, navigate] = useRouter();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { setCurrentTrack, setQueue, addToQueue } = usePlayerStore();
@@ -57,25 +57,28 @@ export default function PlaylistDetail() {
     },
   });
 
-  const tracks: Track[] = playlistTracks?.map(pt => ({
+  const tracks: Track[] =
+    playlistTracks?.map((pt) => ({
     id: pt.id,
     youtubeId: pt.youtubeId,
     title: pt.title,
-    artist: pt.artist,
-    thumbnail: pt.thumbnail,
-    duration: pt.duration,
+      artist: pt.artist ?? undefined,
+      thumbnail: pt.thumbnail ?? undefined,
+      duration: pt.duration ?? undefined,
     source: 'youtube' as const,
-  })) || [];
+    })) ?? [];
 
-  const handlePlayAll = () => {
+  const handlePlayAll = async () => {
     if (tracks.length > 0) {
-      setCurrentTrack(tracks[0]);
+      const { playTrack } = await import("@/lib/playerBridge");
+      await playTrack(tracks[0]);
       setQueue(tracks);
     }
   };
 
-  const handlePlay = (track: Track) => {
-    setCurrentTrack(track);
+  const handlePlay = async (track: Track) => {
+    const { playTrack } = await import("@/lib/playerBridge");
+    await playTrack(track);
     setQueue(tracks);
   };
 

@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { Track } from "@shared/schema";
 import { VideoModal } from "@/components/VideoModal";
 import { useToast } from "@/hooks/use-toast";
+import { VPNNotification } from "@/components/VPNNotification";
 
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -31,6 +32,8 @@ export function AudioEngine() {
   const fadeFrameRef = useRef<number | null>(null);
   const detachVideoListenersRef = useRef<(() => void) | null>(null);
   const [isVideoActive, setIsVideoActive] = useState(false);
+  const [showVPNNotification, setShowVPNNotification] = useState(false);
+  const [vpnNotificationMessage, setVpnNotificationMessage] = useState<string | undefined>();
   const { toast } = useToast();
   const storeSlice = usePlayerStore(
     useShallow((state: PlayerStoreState) => ({
@@ -223,6 +226,23 @@ export function AudioEngine() {
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onEnded = () => playNext();
+    const onError = (e: Event) => {
+      console.error("Audio element error:", e);
+      const audioElement = e.target as HTMLAudioElement;
+      const error = audioElement.error;
+      
+      if (error) {
+        // Check if it's a network/access error (403, CORS, etc.)
+        if (error.code === MediaError.MEDIA_ERR_NETWORK || error.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+          // Check if the source URL contains googlevideo (likely a 403)
+          const src = audioElement.src;
+          if (src && (src.includes('googlevideo.com') || src.includes('/api/streams') || src.includes('/proxy'))) {
+            setVpnNotificationMessage("Unable to access stream. This might be due to regional restrictions or access limitations.");
+            setShowVPNNotification(true);
+          }
+        }
+      }
+    };
 
     audio.addEventListener("loadedmetadata", onLoadedMetadata);
     audio.addEventListener("canplay", onCanPlay);
@@ -230,6 +250,7 @@ export function AudioEngine() {
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
 
     return () => {
       setAudioElement(null);
@@ -239,6 +260,7 @@ export function AudioEngine() {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
+      audio.removeEventListener("error", onError);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -484,6 +506,8 @@ export function AudioEngine() {
           setIsLoadingStream(false);
           if (!info) {
             console.error("No stream available for track", currentTrack.youtubeId);
+            setVpnNotificationMessage("Unable to load stream. All streaming sources failed. This might be due to regional restrictions.");
+            setShowVPNNotification(true);
             toast({
               title: "Stream unavailable",
               description: "Unable to load stream. Please try again later or try switching location using VPN.",
@@ -560,6 +584,17 @@ export function AudioEngine() {
         } catch (error) {
           console.error("Failed to resolve audio stream:", error);
           setIsLoadingStream(false);
+          
+          // Check if it's a 403 or network error
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (errorMessage.includes('403') || errorMessage.includes('Forbidden') || errorMessage.includes('Access denied')) {
+            setVpnNotificationMessage("Access denied by video provider. This might be due to regional restrictions or IP blocking.");
+            setShowVPNNotification(true);
+          } else {
+            setVpnNotificationMessage("Unable to load stream. Please try again later or try switching location using VPN.");
+            setShowVPNNotification(true);
+          }
+          
           toast({
             title: "Stream unavailable",
             description: "Unable to load stream. Please try again later or try switching location using VPN.",
@@ -1058,6 +1093,12 @@ export function AudioEngine() {
           setVideoModalOpen(false);
           setAudioOnlyMode(true);
         }}
+      />
+
+      <VPNNotification
+        isOpen={showVPNNotification}
+        onClose={() => setShowVPNNotification(false)}
+        message={vpnNotificationMessage}
       />
     </AnimatePresence>
   );

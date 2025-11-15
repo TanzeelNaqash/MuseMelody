@@ -1,10 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LyricsPanel } from "@/components/LyricsPanel";
-import { useRouter } from "wouter";
+import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 
 export default function Lyrics() {
-  const [, navigate] = useRouter();
+  const { t } = useTranslation();
+  const [, navigate] = useLocation();
 
   return (
     <div className="min-h-screen pb-32">
@@ -15,7 +17,7 @@ export default function Lyrics() {
           data-testid="button-back-lyrics"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
+          {t('common.back')}
         </Button>
       </div>
       <LyricsPanel />

@@ -1,6 +1,6 @@
-import { Play, Plus, MoreVertical } from "lucide-react";
+import { Play, MoreVertical } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,114 +8,123 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { Track } from "@shared/schema";
-import { cn } from "@/lib/utils";
-import { useState } from "react";
+
+// Optional helper to handle thumbnails (if you have proxies)
+const proxyThumbnail = (url?: string) => url || "/placeholder.svg";
 
 interface TrackCardProps {
   track: Track;
   onPlay: (track: Track) => void;
   onAddToQueue?: (track: Track) => void;
   onAddToPlaylist?: (track: Track) => void;
+  onClick?: () => void;
   className?: string;
 }
 
-export function TrackCard({ track, onPlay, onAddToQueue, onAddToPlaylist, className }: TrackCardProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
-  const formatDuration = (seconds?: number) => {
-    if (!seconds) return '';
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${String(secs).padStart(2, '0')}`;
-  };
+export function TrackCard({
+  track,
+  onPlay,
+  onAddToQueue,
+  onAddToPlaylist,
+  onClick,
+  className,
+}: TrackCardProps) {
+  const { title, artist, thumbnail } = track;
 
   return (
-    <Card
+    <div
+      onClick={onClick}
       className={cn(
-        "group relative overflow-hidden hover-elevate active-elevate-2 transition-all duration-300",
-        className
+        "group relative overflow-hidden rounded-2xl glass cursor-pointer p-3 sm:p-4 transition-all duration-300 hover-lift hover-glow",
+        className,
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      data-testid={`track-card-${track.id}`}
     >
-      <div className="p-4">
-        {/* Album Art with Play Overlay */}
-        <div className="relative aspect-square mb-3 rounded-lg overflow-hidden bg-muted">
+      {/* Thumbnail */}
+      <div className="relative mb-4 aspect-square overflow-hidden rounded-xl bg-gradient-primary">
+        {thumbnail ? (
           <img
-            src={track.thumbnail || '/placeholder.svg'}
-            alt={track.title}
-            className="w-full h-full object-cover"
+            src={proxyThumbnail(thumbnail)}
+            alt={title}
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
           />
-          
-          {isHovered && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-              <Button
-                size="icon"
-                onClick={() => onPlay(track)}
-                className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 shadow-xl transform scale-100 hover:scale-105 transition-transform"
-                data-testid={`button-play-${track.id}`}
-              >
-                <Play className="h-6 w-6" fill="currentColor" />
-              </Button>
-            </div>
-          )}
-        </div>
-
-        {/* Track Info */}
-        <div className="space-y-1">
-          <h3 className="font-medium text-sm text-foreground truncate" data-testid={`text-track-title-${track.id}`}>
-            {track.title}
-          </h3>
-          <p className="text-xs text-muted-foreground truncate">
-            {track.artist || 'Unknown Artist'}
-          </p>
-          {track.duration && (
-            <p className="text-xs text-muted-foreground">
-              {formatDuration(track.duration)}
-            </p>
-          )}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="mt-3 flex items-center gap-2">
-          {onAddToQueue && (
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={() => onAddToQueue(track)}
-              className="flex-1"
-              data-testid={`button-add-queue-${track.id}`}
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <svg
+              className="h-16 w-16 text-white/50"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
-              <Plus className="h-4 w-4 mr-1" />
-              Queue
-            </Button>
-          )}
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-8 w-8" data-testid={`button-more-${track.id}`}>
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onPlay(track)}>
-                Play Now
-              </DropdownMenuItem>
-              {onAddToQueue && (
-                <DropdownMenuItem onClick={() => onAddToQueue(track)}>
-                  Add to Queue
-                </DropdownMenuItem>
-              )}
-              {onAddToPlaylist && (
-                <DropdownMenuItem onClick={() => onAddToPlaylist(track)}>
-                  Add to Playlist
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"
+              />
+            </svg>
+          </div>
+        )}
+
+        {/* Play Button Overlay */}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlay(track);
+            }}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-primary shadow-glow hover:scale-110 transition-transform"
+          >
+            <Play className="h-5 w-5 text-white ml-0.5" fill="white" />
+          </div>
         </div>
+
+        {/* More Options Button */}
+        {(onAddToQueue || onAddToPlaylist) && (
+          <div
+            className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-full bg-black/40 text-white hover:bg-black/60"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-44 rounded-xl border border-border/60 bg-card/95 backdrop-blur"
+              >
+                <DropdownMenuItem onClick={() => onPlay(track)}>
+                  Play Now
+                </DropdownMenuItem>
+                {onAddToQueue && (
+                  <DropdownMenuItem onClick={() => onAddToQueue(track)}>
+                    Add to Queue
+                  </DropdownMenuItem>
+                )}
+                {onAddToPlaylist && (
+                  <DropdownMenuItem onClick={() => onAddToPlaylist(track)}>
+                    Add to Playlist
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )}
       </div>
-    </Card>
+
+      {/* Title + Artist */}
+      <div className="space-y-1">
+        <h3 className="truncate font-semibold text-foreground text-xs sm:text-sm">{title}</h3>
+        <p className="truncate text-[0.7rem] sm:text-sm text-muted-foreground">
+          {artist || "Unknown Artist"}
+        </p>
+      </div>
+    </div>
   );
 }

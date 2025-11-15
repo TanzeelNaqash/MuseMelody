@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import React from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,12 +8,13 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { PlayerBar } from "@/components/PlayerBar";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { useAuth } from "@/hooks/useAuth";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { UserMenu } from "@/components/UserMenu";
+import { useTranslation } from "react-i18next";
+import "./lib/i18n";
 
 import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
@@ -23,16 +25,83 @@ import PlaylistDetail from "@/pages/PlaylistDetail";
 import Queue from "@/pages/Queue";
 import Lyrics from "@/pages/Lyrics";
 import NotFound from "@/pages/not-found";
-
+import SearchModal from "@/pages/Search";
 function Router() {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user, login } = useAuth();
+  const { t } = useTranslation();
+  const [, setLocation] = useLocation();
+
+  // Handle OAuth callback token from URL - run before useAuth checks
+  React.useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const error = urlParams.get('error');
+
+    // Process token if present (don't check isAuthenticated - process immediately)
+    if (token) {
+      // Store token immediately
+      localStorage.setItem("auth_token", token);
+      
+      const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5001';
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const userData = await res.json();
+            // Store user data
+            localStorage.setItem("auth_user", JSON.stringify(userData));
+            // Update state immediately
+            login(userData, token);
+            // Clean URL
+            window.history.replaceState({}, '', '/');
+          } else {
+            console.error('Failed to fetch user data:', res.status);
+            localStorage.removeItem("auth_token");
+            localStorage.removeItem("auth_user");
+            window.history.replaceState({}, '', '/');
+          }
+        })
+        .catch((err) => {
+          console.error('Error fetching user data:', err);
+          localStorage.removeItem("auth_token");
+          localStorage.removeItem("auth_user");
+          window.history.replaceState({}, '', '/');
+        });
+    } else if (error) {
+      console.error('Auth error:', error);
+      // Show user-friendly error message
+      if (error === 'oauth_unauthorized') {
+        alert('Google OAuth authorization failed. Please check your Google OAuth credentials.');
+      } else if (error === 'database_schema_error') {
+        alert('Database schema not initialized. Please run: npm run db:push');
+      } else if (error === 'database_error') {
+        alert('Database connection error. Please try again later or contact support.');
+      } else {
+        alert(`Authentication error: ${error}`);
+      }
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    }
+  }, [login]); // Include login in dependencies
+
+  // Force navigation when authentication state changes from false to true
+  React.useEffect(() => {
+    if (!isLoading && isAuthenticated && window.location.pathname !== '/') {
+      // User just authenticated, navigate to home
+      setLocation('/');
+    }
+  }, [isAuthenticated, isLoading, setLocation]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">{t('common.loading')}</p>
         </div>
       </div>
     );
@@ -57,26 +126,15 @@ function Router() {
               <SidebarTrigger data-testid="button-sidebar-toggle" />
             </div>
             <div className="flex items-center gap-3">
+              <LanguageSwitcher />
               <ThemeToggle />
-              <Avatar className="h-8 w-8">
-                <AvatarImage src={user?.profileImageUrl || undefined} />
-                <AvatarFallback>
-                  {user?.firstName?.[0] || user?.email?.[0] || 'U'}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => window.location.href = '/api/logout'}
-                data-testid="button-logout"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
+              <UserMenu />
             </div>
           </header>
           <main className="flex-1 overflow-auto">
             <Switch>
               <Route path="/" component={Home} />
+              <Route path="/search" component={SearchModal} />
               <Route path="/library" component={Library} />
               <Route path="/upload" component={Upload} />
               <Route path="/create-playlist" component={CreatePlaylist} />

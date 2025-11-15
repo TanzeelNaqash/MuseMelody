@@ -3,29 +3,47 @@ import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { rememberStreamPreference } from "@/lib/streamPreferences";
 
-interface SearchResult {
+export interface SearchResultItem {
   id: string;
   title: string;
   artist: string;
-  thumbnail: string;
+  thumbnailUrl: string;
   duration: number;
+  isVideo?: boolean;
+  streamSource?: 'piped' | 'invidious';
+  streamInstance?: string | null;
 }
 
 interface SearchBarProps {
-  onSelectResult: (result: SearchResult) => void;
+  onSelectResult: (result: SearchResultItem) => void;
   className?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+  showDropdown?: boolean;
 }
 
-export function SearchBar({ onSelectResult, className }: SearchBarProps) {
-  const [query, setQuery] = useState("");
+export function SearchBar({ onSelectResult, className, value, onChange, showDropdown = true }: SearchBarProps) {
+  const { t } = useTranslation();
+  const [internalValue, setInternalValue] = useState("");
+  const query = value ?? internalValue;
+  const setQuery = (next: string) => {
+    if (onChange) {
+      onChange(next);
+    } else {
+      setInternalValue(next);
+    }
+  };
+
   const [isFocused, setIsFocused] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
 
-  const { data: suggestions, isLoading } = useQuery<SearchResult[]>({
+  const { data: suggestions, isLoading } = useQuery<SearchResultItem[]>({
     queryKey: ["/api/youtube/search", query],
-    enabled: query.length > 2,
+    enabled: showDropdown && query.length > 2,
   });
 
   useEffect(() => {
@@ -39,10 +57,17 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSelect = (result: SearchResult) => {
+  const handleSelect = (result: SearchResultItem) => {
+    if (result.streamSource) {
+      rememberStreamPreference(result.id, result.streamSource, result.streamInstance);
+    }
     onSelectResult(result);
     setQuery("");
     setIsFocused(false);
+  };
+
+  const handleClear = () => {
+    setQuery("");
   };
 
   return (
@@ -51,7 +76,7 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
         <Input
           type="search"
-          placeholder="Search for songs, artists, albums..."
+          placeholder={t('search.placeholder')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setIsFocused(true)}
@@ -62,7 +87,7 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => setQuery("")}
+            onClick={handleClear}
             className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8"
             data-testid="button-clear-search"
           >
@@ -71,12 +96,11 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
         )}
       </div>
 
-      {/* Search Suggestions Dropdown */}
-      {isFocused && query.length > 2 && (
+      {showDropdown && isFocused && query.length > 2 && (
         <div className="absolute top-full mt-2 w-full bg-popover border border-popover-border rounded-lg shadow-xl z-50 max-h-96 overflow-y-auto">
           {isLoading ? (
             <div className="p-4 text-center text-muted-foreground">
-              Searching...
+              {t('search.searching')}
             </div>
           ) : suggestions && suggestions.length > 0 ? (
             <div className="py-2">
@@ -88,7 +112,7 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
                   data-testid={`search-result-${result.id}`}
                 >
                   <img
-                    src={result.thumbnail}
+                    src={result.thumbnailUrl}
                     alt={result.title}
                     className="w-12 h-12 rounded-md object-cover flex-shrink-0"
                   />
@@ -101,14 +125,14 @@ export function SearchBar({ onSelectResult, className }: SearchBarProps) {
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {Math.floor(result.duration / 60)}:{String(result.duration % 60).padStart(2, '0')}
+                    {Math.floor(result.duration / 60)}:{String(result.duration % 60).padStart(2, "0")}
                   </span>
                 </button>
               ))}
             </div>
           ) : (
             <div className="p-4 text-center text-muted-foreground">
-              No results found
+              {t('search.noResults')}
             </div>
           )}
         </div>
