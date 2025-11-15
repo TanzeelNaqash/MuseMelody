@@ -225,7 +225,17 @@ export function AudioEngine() {
     const onTimeUpdate = () => setCurrentTime(Math.floor(audio.currentTime));
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
-    const onEnded = () => playNext();
+    const onEnded = () => {
+      const { isRepeat, currentTrack } = usePlayerStore.getState();
+      // If repeat is enabled, replay the current track
+      if (isRepeat && currentTrack) {
+        setCurrentTime(0);
+        requestSeek(0);
+        return;
+      }
+      // Otherwise, play next (which handles shuffle)
+      playNext();
+    };
     const onError = (e: Event) => {
       console.error("Audio element error:", e);
       const audioElement = e.target as HTMLAudioElement;
@@ -266,7 +276,7 @@ export function AudioEngine() {
         hlsRef.current = null;
       }
     };
-  }, [playNext, setAudioElement, setCurrentTime, setDuration, setIsPlaying]);
+  }, [playNext, setAudioElement, setCurrentTime, setDuration, setIsPlaying, requestSeek]);
 
   const attachVideoListeners = (video: HTMLVideoElement) => {
     const onLoadedMetadata = () => {
@@ -280,7 +290,17 @@ export function AudioEngine() {
       if (!video.paused) return;
       setIsPlaying(false);
     };
-    const onEnded = () => playNext();
+    const onEnded = () => {
+      const { isRepeat, currentTrack } = usePlayerStore.getState();
+      // If repeat is enabled, replay the current track
+      if (isRepeat && currentTrack) {
+        setCurrentTime(0);
+        requestSeek(0);
+        return;
+      }
+      // Otherwise, play next (which handles shuffle)
+      playNext();
+    };
 
     video.addEventListener("loadedmetadata", onLoadedMetadata);
     video.addEventListener("timeupdate", onTimeUpdate);
@@ -950,7 +970,7 @@ export function AudioEngine() {
                       onClick={toggleShuffle}
                       className={cn(
                         "h-10 w-10 rounded-full bg-white/10 text-white transition hover:bg-white/20",
-                        isShuffle && "text-primary",
+                        isShuffle && "bg-primary/20 text-primary border border-primary/30",
                       )}
                     >
                       <Shuffle className="h-5 w-5" />
@@ -984,7 +1004,7 @@ export function AudioEngine() {
                       onClick={toggleRepeat}
                       className={cn(
                         "h-10 w-10 rounded-full bg-white/10 text-white transition hover:bg-white/20",
-                        isRepeat && "text-primary",
+                        isRepeat && "bg-primary/20 text-primary border border-primary/30",
                       )}
                     >
                       <Repeat className="h-5 w-5" />

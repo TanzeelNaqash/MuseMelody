@@ -14,6 +14,8 @@ import {
   Maximize2,
   Minimize2,
   Loader2,
+  X,
+  Music2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -85,6 +87,8 @@ export function PlayerBar() {
       setCurrentTrack: state.setCurrentTrack,
       setVolume: state.setVolume,
       isLoadingStream: state.isLoadingStream,
+      removeFromQueue: state.removeFromQueue,
+      clearQueue: state.clearQueue,
     })),
   );
 
@@ -116,6 +120,8 @@ export function PlayerBar() {
     setCurrentTrack,
     setVolume,
     isLoadingStream,
+    removeFromQueue,
+    clearQueue,
   } = storeSlice;
 
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
@@ -162,6 +168,21 @@ export function PlayerBar() {
     setShowQueuePanel(false);
   };
 
+  const handleRemoveFromQueue = (index: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeFromQueue(index);
+  };
+
+  const handlePlayTrack = (track: PlayerTrack, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentTrack(track);
+    requestSeek(0);
+  };
+
+  const isTrackPlaying = (track: PlayerTrack) => {
+    return track.youtubeId === currentTrack?.youtubeId || track.id === currentTrack?.id;
+  };
+
   const handleVideoToggle = () => {
     if (audioOnlyMode) {
       setAudioOnlyMode(false);
@@ -182,13 +203,163 @@ export function PlayerBar() {
 
   return (
     <div className="fixed bottom-4 left-0 right-0 z-50 px-3 pb-1 sm:px-6">
+      {/* Queue Panel - Outside overflow container */}
+      <AnimatePresence>
+        {showQueuePanel && (
+          <motion.div
+            key="queue-panel"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-full left-3 right-3 mb-4 max-h-[28rem] w-auto overflow-hidden rounded-3xl border border-white/10 bg-background/95 shadow-2xl backdrop-blur-xl sm:left-6 sm:right-6"
+            style={{ maxWidth: '1280px', marginLeft: 'auto', marginRight: 'auto' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Music2 className="h-4 w-4 text-primary" />
+                <p className="text-sm font-semibold text-foreground">
+                  Queue <span className="text-muted-foreground">({queue.length})</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {queue.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-white/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearQueue();
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-lg hover:bg-white/10"
+                  onClick={() => setShowQueuePanel(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Queue List */}
+            <div className="max-h-[20rem] overflow-y-auto p-2">
+              {queue.length ? (
+                <div className="space-y-1">
+                  {queue.map((track: PlayerTrack, index: number) => {
+                    const isCurrentTrack = isTrackPlaying(track);
+                    const isCurrentlyPlaying = isCurrentTrack && isPlaying;
+                    return (
+                      <motion.div
+                        key={`${track.youtubeId ?? track.id ?? index}-${index}`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ duration: 0.2, delay: index * 0.02 }}
+                        className={cn(
+                          "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all",
+                          isCurrentTrack
+                            ? "bg-primary/20 border border-primary/30 shadow-lg shadow-primary/10"
+                            : "hover:bg-white/5 border border-transparent"
+                        )}
+                      >
+                        {/* Mini Play Button */}
+                        <button
+                          onClick={(e) => handlePlayTrack(track, e)}
+                          className={cn(
+                            "flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl transition-all",
+                            isCurrentTrack
+                              ? "bg-primary text-primary-foreground shadow-md"
+                              : "bg-white/10 text-foreground/70 hover:bg-white/20 hover:text-foreground"
+                          )}
+                        >
+                          {isCurrentTrack && isLoadingStream ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : isCurrentlyPlaying ? (
+                            <Pause className="h-4 w-4" fill="currentColor" />
+                          ) : (
+                            <Play className="h-4 w-4" fill="currentColor" />
+                          )}
+                        </button>
+
+                        {/* Thumbnail */}
+                        <div className="relative flex-shrink-0">
+                          <img
+                            src={track.thumbnail || "/placeholder.svg"}
+                            alt={track.title}
+                            className={cn(
+                              "h-12 w-12 rounded-lg object-cover transition-all",
+                              isCurrentTrack ? "ring-2 ring-primary/50" : ""
+                            )}
+                          />
+                          {isCurrentlyPlaying && (
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/30">
+                              <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Track Info */}
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cn(
+                              "truncate text-sm font-medium",
+                              isCurrentTrack ? "text-primary" : "text-foreground"
+                            )}
+                          >
+                            {track.title}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {track.artist || "Unknown Artist"}
+                          </p>
+                        </div>
+
+                        {/* Duration */}
+                        <span className="text-xs text-muted-foreground tabular-nums">
+                          {formatTime(track.duration ?? 0)}
+                        </span>
+
+                        {/* Remove Button */}
+                        <button
+                          onClick={(e) => handleRemoveFromQueue(index, e)}
+                          className={cn(
+                            "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-all",
+                            "opacity-0 group-hover:opacity-100",
+                            "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          )}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Music2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Queue is empty</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">
+                    Add tracks to start building your queue
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <motion.div
         initial={{ y: 60, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.35, ease: "easeOut" }}
         className="relative mx-auto flex h-auto max-w-[1280px] flex-col gap-3 overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_top_left,hsla(210,90%,62%,0.22),transparent_55%),radial-gradient(circle_at_bottom_right,hsla(315,85%,58%,0.18),transparent_45%)] p-4 shadow-2xl backdrop-blur-xl md:flex-row md:items-center md:gap-6 md:px-6 md:py-4"
       >
-        <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-[0.08]" />
+        <div className="pointer-events-none absolute inset-0 bg-[url('/noise.svg')] opacity-[0.08]"></div>
         <div className="relative flex w-full flex-col items-center gap-4 md:flex-row md:gap-6">
         {/* Track Info */}
         <div className="flex w-full items-center gap-3 md:w-1/3">
@@ -229,8 +400,8 @@ export function PlayerBar() {
               variant="ghost"
               onClick={toggleShuffle}
               className={cn(
-                "h-9 w-9 rounded-full bg-transparent text-foreground/70 transition-colors hover:bg-white/10 hover:text-foreground",
-                isShuffle && "text-primary",
+                "h-9 w-9 rounded-full bg-white/10 text-foreground transition-colors hover:bg-white/20",
+                isShuffle && "bg-primary/20 text-primary border border-primary/30",
               )}
               data-testid="button-shuffle"
             >
@@ -278,8 +449,8 @@ export function PlayerBar() {
               variant="ghost"
               onClick={toggleRepeat}
               className={cn(
-                "h-9 w-9 rounded-full bg-transparent text-foreground/70 transition-colors hover:bg-white/10 hover:text-foreground",
-                isRepeat && "text-primary",
+                "h-9 w-9 rounded-full bg-white/10 text-foreground transition-colors hover:bg-white/20",
+                isRepeat && "bg-primary/20 text-primary border border-primary/30",
               )}
               data-testid="button-repeat"
             >
@@ -396,61 +567,7 @@ export function PlayerBar() {
             )}
           </div>
         </div>
-      </div>
-
-        <AnimatePresence>
-          {showQueuePanel && (
-            <motion.div
-              key="queue-panel"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.2 }}
-              className="absolute bottom-full left-0 right-0 mb-4 max-h-80 overflow-hidden rounded-3xl border border-white/10 bg-background/95 p-4 text-sm shadow-2xl backdrop-blur"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-                  Queue
-                </p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="rounded-full border border-transparent bg-white/10 px-3 text-white hover:bg-white/20"
-                  onClick={() => setShowQueuePanel(false)}
-                >
-                  Close
-                </Button>
-              </div>
-              <div className="max-h-60 overflow-y-auto space-y-2">
-                {queue.length ? (
-                  queue.map((track: PlayerTrack, index: number) => (
-                    <button
-                      key={`${track.youtubeId ?? track.id ?? index}-${index}`}
-                      onClick={() => handleQueueSelect(track)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-left transition hover:bg-white/10",
-                        track.youtubeId === currentTrack.youtubeId && "bg-white/10 border border-white/20",
-                      )}
-                    >
-                      <img
-                        src={track.thumbnail || "/placeholder.svg"}
-                        alt={track.title}
-                        className="h-10 w-10 flex-shrink-0 rounded-xl object-cover"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{track.title}</p>
-                        <p className="truncate text-xs text-white/70">{track.artist || "Unknown Artist"}</p>
-                      </div>
-                      <span className="text-xs text-white/50">{formatTime(track.duration ?? 0)}</span>
-                    </button>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">Queue is empty.</p>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </div>
       </motion.div>
     </div>
   );

@@ -337,16 +337,48 @@ export const usePlayerStore = create<PlayerStoreState>()(
         addToQueue: (track) => set((s) => ({ queue: [...s.queue, track] })),
         removeFromQueue: (index) => set((s) => ({ queue: s.queue.filter((_, i) => i !== index) })),
         playNext: () => {
-          const { queue, currentTrack } = get()
+          const { queue, currentTrack, isShuffle } = get()
           if (!queue.length) return
+          
           const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id)
+          
+          // If shuffle is enabled, pick a random track (excluding current)
+          if (isShuffle) {
+            const availableTracks = queue.filter((t) => t.id !== currentTrack?.id)
+            if (availableTracks.length === 0) {
+              // If only one track, just replay it
+              set({ currentTrack, isPlaying: true, currentTime: 0 })
+              return
+            }
+            const randomIndex = Math.floor(Math.random() * availableTracks.length)
+            set({ currentTrack: availableTracks[randomIndex], isPlaying: true, currentTime: 0 })
+            return
+          }
+          
+          // Normal sequential playback
           const nextIndex = (currentIndex + 1) % queue.length
           set({ currentTrack: queue[nextIndex], isPlaying: true, currentTime: 0 })
         },
         playPrevious: () => {
-          const { queue, currentTrack } = get()
+          const { queue, currentTrack, isShuffle } = get()
           if (!queue.length) return
+          
           const currentIndex = queue.findIndex((t) => t.id === currentTrack?.id)
+          
+          // If shuffle is enabled, pick a random track (excluding current)
+          if (isShuffle) {
+            const availableTracks = queue.filter((t) => t.id !== currentTrack?.id)
+            if (availableTracks.length === 0) {
+              // If only one track, just replay it
+              set({ currentTrack, isPlaying: true, currentTime: 0 })
+              return
+            }
+            const randomIndex = Math.floor(Math.random() * availableTracks.length)
+            set({ currentTrack: availableTracks[randomIndex], isPlaying: true, currentTime: 0 })
+            return
+          }
+          
+          // Normal sequential playback
           const prevIndex = currentIndex <= 0 ? queue.length - 1 : currentIndex - 1
           set({ currentTrack: queue[prevIndex], isPlaying: true, currentTime: 0 })
         },
