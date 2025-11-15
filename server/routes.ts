@@ -300,8 +300,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
       source: 'youtube';
     }> = [];
 
+    // Comprehensive list of non-music keywords
+    const nonMusicKeywords = [
+      // News & Current Events
+      'news', 'breaking', 'update', 'report', 'headline', 'politics', 'election', 'election results',
+      // Gaming
+      'gaming', 'gameplay', 'playthrough', 'walkthrough', 'let\'s play', 'lets play', 'game review',
+      'speedrun', 'gamer', 'twitch', 'streamer', 'esports', 'tournament', 'competitive',
+      // Lifestyle & Vlogs
+      'vlog', 'lifestyle', 'daily vlog', 'day in my life', 'morning routine', 'night routine',
+      'fashion', 'outfit', 'haul', 'shopping', 'makeup', 'beauty', 'skincare', 'routine',
+      // Food & Cooking
+      'recipe', 'cooking', 'baking', 'food', 'restaurant', 'review', 'taste test', 'mukbang',
+      'chef', 'kitchen', 'meal prep', 'foodie',
+      // Tech & Reviews
+      'unboxing', 'review', 'tech review', 'product review', 'comparison', 'vs', 'versus',
+      'tutorial', 'how to', 'guide', 'tips', 'tricks', 'explained',
+      // Entertainment (Non-Music)
+      'podcast', 'interview', 'talk show', 'documentary', 'trailer', 'teaser',
+      'movie', 'film', 'episode', 'series', 'tv show', 'comedy', 'skit', 'standup',
+      'comedy special', 'netflix', 'disney', 'marvel', 'dc',
+      // Live Content
+      'livestream', 'live stream', 'live chat', 'streaming', 'live', 'premiere',
+      // Educational
+      'lecture', 'course', 'class', 'lesson', 'education', 'learning', 'study',
+      // Sports
+      'sports', 'football', 'soccer', 'basketball', 'highlights', 'match', 'game',
+      // Other
+      'asmr', 'relaxing', 'meditation', 'yoga', 'workout', 'fitness', 'motivation',
+      'inspirational', 'story', 'storytime', 'prank', 'challenge', 'experiment'
+    ];
+
+    // Positive indicators that suggest music content
+    const musicIndicators = [
+      'song', 'music', 'track', 'album', 'single', 'ep', 'mixtape',
+      'feat', 'ft.', 'ft ', 'featuring', 'remix', 'cover', 'original',
+      'mv', 'music video', 'official audio', 'official video', 'lyrics',
+      'artist', 'singer', 'rapper', 'producer', 'dj', 'beat', 'instrumental'
+    ];
+
+    const isMusicTrack = (track: ReturnType<typeof mapItemToTrack>, item?: any): boolean => {
+      if (!track) return false;
+      
+      const title = (track.title || '').toLowerCase();
+      const artist = (track.artist || '').toLowerCase();
+      const text = `${title} ${artist}`;
+      
+      // Get additional context from item if available
+      const itemTitle = item?.title?.toLowerCase() || title;
+      const itemDescription = (item?.description || '').toLowerCase();
+      const itemAuthor = (item?.author || item?.uploaderName || item?.channelName || artist).toLowerCase();
+      const fullText = `${itemTitle} ${itemDescription} ${itemAuthor}`;
+      
+      // STRICT: Check if it contains ANY non-music keywords
+      for (const keyword of nonMusicKeywords) {
+        if (fullText.includes(keyword)) {
+          return false;
+        }
+      }
+      
+      // Check for music indicators - prefer content with music keywords
+      let hasMusicIndicator = false;
+      for (const indicator of musicIndicators) {
+        if (fullText.includes(indicator)) {
+          hasMusicIndicator = true;
+          break;
+        }
+      }
+      
+      // Artist/Channel name validation
+      // Music artists typically have short names (1-4 words)
+      const artistWords = itemAuthor.trim().split(/\s+/).filter((w: string) => w.length > 0).length;
+      
+      // If no music indicators AND artist name is very long, likely not music
+      if (!hasMusicIndicator && artistWords > 5) {
+        // Very long names without music indicators are usually channel names, not artists
+        return false;
+      }
+      
+      // If no music indicators AND title is very generic/long, reject
+      if (!hasMusicIndicator && itemTitle.length > 60) {
+        return false;
+      }
+      
+      // Duration filtering - STRICT: 45 seconds to 10 minutes (600 seconds)
+      let duration = track.duration;
+      if (!duration && item) {
+        duration = item?.lengthSeconds || item?.duration || 0;
+      }
+      if (duration > 0) {
+        if (duration < 45 || duration > 600) {
+          return false;
+        }
+      } else {
+        // If no duration available, be cautious
+        // Only allow if it has strong music indicators
+        if (!hasMusicIndicator) {
+          return false;
+        }
+      }
+      
+      // Title length check - songs have concise titles
+      if (itemTitle.length > 80) {
+        return false;
+      }
+      
+      // Additional heuristics:
+      // - Reject if description is very long (music videos have shorter descriptions)
+      if (itemDescription.length > 500) {
+        return false;
+      }
+      
+      // - Reject common non-music patterns
+      const nonMusicPatterns = [
+        /^\d+\s*(hours?|minutes?|days?)\s*(ago|old)/i, // Time-based titles
+        /live\s+(now|stream|chat)/i, // Live streams
+        /episode\s+\d+/i, // Episodes
+        /part\s+\d+/i, // Multi-part content
+        /season\s+\d+/i, // TV seasons
+      ];
+      
+      for (const pattern of nonMusicPatterns) {
+        if (pattern.test(itemTitle)) {
+          return false;
+        }
+      }
+      
+      return true;
+    };
+
     const pushTrack = (track: ReturnType<typeof mapItemToTrack>) => {
       if (!track) return;
+      // Track is already validated by isMusicTrack before calling pushTrack
       if (track.duration && track.duration < 45) return;
       if (seen.has(track.id)) return;
       seen.add(track.id);
@@ -332,7 +462,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       items.forEach((item) => {
         if (item?.isShort) return;
-        pushTrack(mapItemToTrack(item, { source: 'piped', instance }));
+        const track = mapItemToTrack(item, { source: 'piped', instance });
+        // Pass item for additional filtering context
+        if (track && isMusicTrack(track, item)) {
+          pushTrack(track);
+        }
       });
     } catch (error) {
       console.error('Piped trending fetch failed:', error);
@@ -360,7 +494,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         items.forEach((item) => {
           const track = mapItemToTrack(item, { source: 'invidious', instance });
           if (!track) return;
-          pushTrack(track);
+          // Pass item for additional filtering context
+          if (isMusicTrack(track, item)) {
+            pushTrack(track);
+          }
         });
       } catch (error) {
         console.error('Invidious trending fetch failed:', error);
@@ -398,6 +535,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         >();
 
+        // Use the same comprehensive filtering - convert item to track first
+        const isMusicContent = (item: any): boolean => {
+          // Convert to track format for consistent filtering
+          const track = mapItemToTrack(item, { source: 'invidious', instance: uma.getLastSuccessfulInstance('invidious') });
+          if (!track) return false;
+          
+          // Use the same strict filtering function
+          return isMusicTrack(track, item);
+        };
+
         searchResults.forEach((result, queryIndex) => {
           if (result.status !== 'fulfilled') {
             console.error('Trending search failed:', TRENDING_QUERIES[queryIndex]?.query, result.reason);
@@ -406,6 +553,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           const { items, weight, instance } = result.value;
           items.forEach((item: any, itemIndex: number) => {
+            // Filter out non-music content
+            if (!isMusicContent(item)) {
+              return;
+            }
+            
             const track = mapItemToTrack(item, { source: 'invidious', instance });
             if (!track) return;
             if (track.duration && track.duration < 45) return;
@@ -475,15 +627,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Build headers for Google Video - must match browser exactly
+      // Google Video checks Origin, Referer, and other headers strictly
       const headers: Record<string, string> = {
         // Use a proper browser User-Agent (Google blocks non-browser UAs)
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': '*/*',
+        // More specific Accept header for audio streams
+        'Accept': 'audio/webm,audio/ogg,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept-Encoding': 'identity', // Don't compress, we're streaming
+        // Critical: Google Video checks these headers
         'Referer': 'https://www.youtube.com/',
         'Origin': 'https://www.youtube.com',
         'Connection': 'keep-alive',
+        // Additional headers that browsers send
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
       };
 
       // Forward Range header if present (critical for streaming)
@@ -495,16 +653,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Stream with proper headers and redirect handling
+      // Important: Don't modify the URL - Google validates the signature
+      // Set up timeout to avoid hanging requests
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
       const upstream = await fetch(src, {
         headers,
         redirect: 'follow',
-        // Don't follow redirects automatically, but handle them
+        signal: controller.signal,
+      }).finally(() => {
+        clearTimeout(timeoutId);
       });
 
-      // Handle 403 errors
+      // Handle 403 errors - often means expired URL signature or IP blocking
       if (upstream.status === 403) {
         console.error('[PROXY] 403 Forbidden for URL:', src.substring(0, 100) + '...');
         console.error('[PROXY] Response headers:', Object.fromEntries(upstream.headers.entries()));
+        
+        // Check if URL might be expired by looking at expire parameter
+        const urlObj = new URL(src);
+        const expireParam = urlObj.searchParams.get('expire');
+        if (expireParam) {
+          const expireTime = parseInt(expireParam, 10);
+          const currentTime = Math.floor(Date.now() / 1000);
+          if (expireTime < currentTime) {
+            console.error('[PROXY] URL expired:', { expireTime, currentTime, diff: currentTime - expireTime });
+            return res.status(403).json({ 
+              message: 'Stream URL expired',
+              error: 'The stream URL has expired. Please refresh and try again.',
+              expired: true,
+            });
+          }
+        }
+        
         return res.status(403).json({ 
           message: 'Access denied by video provider',
           error: 'Unable to access stream. Please try again later or try switching location using VPN.',
@@ -681,10 +863,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Listening history routes
-  app.post('/api/history', authenticateToken, async (req: any, res) => {
+  // Listening history routes - allow guests (they won't have history but won't error)
+  app.post('/api/history', authenticateWithGuest, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      // Skip history for guest users
+      if (userId === 'guest') {
+        return res.json({ message: 'History not saved for guest users' });
+      }
       const history = await storage.addToHistory({
         userId,
         youtubeId: req.body.youtubeId,
@@ -700,9 +886,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/history', authenticateToken, async (req: any, res) => {
+  app.get('/api/history', authenticateWithGuest, async (req: any, res) => {
     try {
       const userId = req.user.id;
+      // Return empty array for guest users
+      if (userId === 'guest') {
+        return res.json([]);
+      }
       const limit = parseInt(req.query.limit as string) || 50;
       const history = await storage.getHistory(userId, limit);
       res.json(history);
