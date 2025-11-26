@@ -634,6 +634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mimeType: resolved.mimeType,
         origin: resolved.source,
         instance: usedInstance,
+        videoStreams: resolved.videoStreams,
       });
     } catch (e: any) {
       console.error('Resolve stream failed:', e);

@@ -4,6 +4,19 @@ import { getStreamPreference } from "@/lib/streamPreferences";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5001";
 
+export interface VideoStream {
+  bitrate: number | string;
+  codec: string;
+  contentLength?: number | string;
+  quality: string;
+  mimeType: string;
+  url: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  itag?: number | string;
+}
+
 export interface ResolvedStream {
   url: string;
   proxiedUrl?: string;
@@ -11,6 +24,7 @@ export interface ResolvedStream {
   manifestUrl?: string | null;
   mimeType?: string;
   origin?: 'piped' | 'invidious';
+  videoStreams?: VideoStream[];
 }
 
 export async function getBestAudioStreamUrl(
@@ -50,6 +64,12 @@ export async function getBestAudioStreamUrl(
   const proxied = data.proxiedUrl ? `${API_URL}${data.proxiedUrl}` : undefined;
   // Always use proxy to avoid CORS issues
   // The proxy will handle 403 errors gracefully
+  // Process video streams to add proxy URLs
+  const videoStreams = data.videoStreams?.map((stream: any) => ({
+    ...stream,
+    proxiedUrl: stream.url ? `${API_URL}/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(stream.url)}&source=${data.origin || 'piped'}${data.instance ? `&instance=${encodeURIComponent(data.instance)}` : ''}` : undefined,
+  }));
+
   return {
     url: proxied ?? data.url,
     proxiedUrl: proxied,
@@ -57,5 +77,6 @@ export async function getBestAudioStreamUrl(
     manifestUrl: data.manifestUrl ?? undefined,
     mimeType: data.mimeType ?? undefined,
     origin: data.origin,
+    videoStreams: videoStreams,
   };
 }

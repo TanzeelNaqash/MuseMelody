@@ -10,11 +10,25 @@ interface PipedAudioStream {
   url: string;
 }
 
+interface PipedVideoStream {
+  bitrate: number | string;
+  codec: string;
+  contentLength?: number | string;
+  quality: string;
+  mimeType: string;
+  url: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  itag?: number | string;
+}
+
 interface PipedResponse {
   title?: string;
   uploader?: string;
   duration?: number;
   audioStreams?: PipedAudioStream[];
+  videoStreams?: PipedVideoStream[];
   hls?: string;
 }
 export interface ResolvedStream {
@@ -22,6 +36,7 @@ export interface ResolvedStream {
   manifestUrl?: string | null;
   mimeType?: string;
   audioStreams: PipedAudioStream[];
+  videoStreams?: PipedVideoStream[];
   source: 'piped' | 'invidious';
 }
 
@@ -237,8 +252,61 @@ async function fetchFromInvidious(youtubeId: string, preferredInstance?: string)
         })
         .filter((stream) => Boolean(stream.url));
 
+      // Map itag to quality label
+      const getQualityLabel = (itag: number | string | undefined, height: number | undefined): string => {
+        if (height) {
+          if (height >= 4320) return '4320p (8K)';
+          if (height >= 2160) return '2160p (4K)';
+          if (height >= 1440) return '1440p (2K)';
+          if (height >= 1080) return '1080p';
+          if (height >= 720) return '720p';
+          if (height >= 480) return '480p';
+          if (height >= 360) return '360p';
+          if (height >= 240) return '240p';
+          if (height >= 144) return '144p';
+        }
+        // Fallback to itag-based mapping
+        const itagNum = typeof itag === 'number' ? itag : parseInt(String(itag || ''), 10);
+        const itagMap: Record<number, string> = {
+          160: '144p', 133: '240p', 134: '360p', 135: '480p', 136: '720p', 137: '1080p',
+          264: '1440p', 266: '2160p', 272: '4320p', 298: '720p60', 299: '1080p60',
+          303: '1080p60', 308: '1440p60', 313: '2160p60', 315: '2160p60', 330: '144p60',
+          331: '240p60', 332: '360p60', 333: '480p60', 334: '720p60', 335: '1080p60',
+          336: '1440p60', 337: '2160p60', 338: '4320p60',
+        };
+        return itagMap[itagNum] || `${height || 'Unknown'}p`;
+      };
+
+      const videoStreams = (data.adaptiveFormats as any[])
+        .filter((f) => typeof f.type === 'string' && f.type.startsWith('video'))
+        .map((format) => {
+          const url = resolveStreamUrl(format);
+          const height = parseNumeric(format.height);
+          const width = parseNumeric(format.width);
+          const itag = parseNumeric(format.itag);
+          return {
+            bitrate: parseNumeric(format.bitrate) ?? 0,
+            codec: format.encoding || (String(format.type).includes('webm') ? 'vp9' : 'avc1'),
+            contentLength: parseNumeric(format.clen),
+            quality: getQualityLabel(itag, height),
+            mimeType: format.type,
+            url,
+            width,
+            height,
+            fps: parseNumeric(format.fps),
+            itag,
+          };
+        })
+        .filter((stream) => Boolean(stream.url))
+        .sort((a, b) => {
+          const heightA = a.height || 0;
+          const heightB = b.height || 0;
+          return heightB - heightA; // Sort by height descending
+        });
+
       const normalized: PipedResponse = {
         audioStreams: audioStreams as PipedAudioStream[],
+        videoStreams: videoStreams as PipedVideoStream[],
         hls: typeof data.hlsUrl === 'string' ? data.hlsUrl : undefined,
       };
       streamCache.set(`invidious:${youtubeId}`, normalized);
@@ -261,28 +329,31 @@ export async function resolveBestAudioUrl(
   if (cached) return cached;
 
   let audioStreams: PipedAudioStream[] | undefined;
+  let videoStreams: PipedVideoStream[] | undefined;
   let manifestUrl: string | undefined;
   let selectedSource: ResolvedStream['source'] = 'piped';
 
   const tryPiped = async (instance?: string) => {
     const piped = await fetchFromPiped(youtubeId, instance);
     audioStreams = piped.audioStreams ?? [];
+    videoStreams = piped.videoStreams ?? [];
     manifestUrl = piped.hls ?? undefined;
     selectedSource = 'piped';
     try {
       const last = uma.getLastSuccessfulInstance('piped');
-      console.log('[STREAM] Resolved via Piped:', last || 'unknown', 'id:', youtubeId, 'streams:', audioStreams?.length ?? 0);
+      console.log('[STREAM] Resolved via Piped:', last || 'unknown', 'id:', youtubeId, 'audio streams:', audioStreams?.length ?? 0, 'video streams:', videoStreams?.length ?? 0);
     } catch {}
   };
 
   const tryInvidious = async (instance?: string) => {
     const invidious = await fetchFromInvidious(youtubeId, instance);
     audioStreams = invidious.audioStreams ?? [];
+    videoStreams = invidious.videoStreams ?? [];
     manifestUrl = undefined;
     selectedSource = 'invidious';
     try {
       const last = uma.getLastSuccessfulInstance('invidious');
-      console.log('[STREAM] Resolved via Invidious:', last || 'unknown', 'id:', youtubeId, 'streams:', audioStreams?.length ?? 0);
+      console.log('[STREAM] Resolved via Invidious:', last || 'unknown', 'id:', youtubeId, 'audio streams:', audioStreams?.length ?? 0, 'video streams:', videoStreams?.length ?? 0);
     } catch {}
   };
 
@@ -334,6 +405,7 @@ export async function resolveBestAudioUrl(
     manifestUrl: manifestUrl ?? null,
     mimeType: best.mimeType,
     audioStreams: sorted,
+    videoStreams: videoStreams,
     source: selectedSource,
   };
 

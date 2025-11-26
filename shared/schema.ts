@@ -27,13 +27,30 @@ export const sessions = pgTable(
 // User storage table - Required for Replit Auth
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
+  email: varchar("email").notNull().unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
+  password: varchar("password"),
+  isEmailVerified: boolean("is_email_verified").notNull().default(false),
+  googleId: varchar("google_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const otps = pgTable(
+  "otps",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    email: varchar("email").notNull(),
+    code: varchar("code", { length: 10 }).notNull(),
+    type: varchar("type", { length: 50 }).notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    isUsed: boolean("is_used").default(false),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [index("idx_otps_email_type").on(table.email, table.type)],
+);
 
 // Playlists table
 export const playlists = pgTable("playlists", {
@@ -91,6 +108,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   playlists: many(playlists),
   listeningHistory: many(listeningHistory),
   uploadedFiles: many(uploadedFiles),
+  otps: many(otps),
 }));
 
 export const playlistsRelations = relations(playlists, ({ one, many }) => ({
@@ -125,6 +143,13 @@ export const uploadedFilesRelations = relations(uploadedFiles, ({ one }) => ({
 // Zod schemas for inserts
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export const insertOtpSchema = createInsertSchema(otps).omit({
+  id: true,
+  createdAt: true,
+  isUsed: true,
+});
+export type InsertOtp = z.infer<typeof insertOtpSchema>;
+export type Otp = typeof otps.$inferSelect;
 
 export const insertPlaylistSchema = createInsertSchema(playlists).omit({
   id: true,

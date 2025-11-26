@@ -12,10 +12,12 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { LogOut, User, Settings } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'wouter';
 
 export function UserMenu() {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
 
   if (!user) return null;
 
@@ -78,7 +80,7 @@ export function UserMenu() {
           <User className="mr-2 h-4 w-4" />
           <span>Profile</span>
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setLocation('/settings')}>
           <Settings className="mr-2 h-4 w-4" />
           <span>Settings</span>
         </DropdownMenuItem>

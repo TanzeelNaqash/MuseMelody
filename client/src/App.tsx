@@ -24,6 +24,7 @@ import CreatePlaylist from "@/pages/CreatePlaylist";
 import PlaylistDetail from "@/pages/PlaylistDetail";
 import Queue from "@/pages/Queue";
 import Lyrics from "@/pages/Lyrics";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import SearchModal from "@/pages/Search";
 function Router() {
@@ -141,6 +142,7 @@ function Router() {
               <Route path="/playlist/:id" component={PlaylistDetail} />
               <Route path="/queue" component={Queue} />
               <Route path="/lyrics" component={Lyrics} />
+              <Route path="/settings" component={Settings} />
               <Route component={NotFound} />
             </Switch>
           </main>
