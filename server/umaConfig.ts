@@ -13,29 +13,24 @@ export const DEFAULT_UMA_CONFIG: UmaConfig = {
     'https://piped.private.coffee',
     'https://api.piped.private.coffee',
     'https://piped.video',
-    'https://piped.eu.projectsegfau.lt',
-    'https://piped.us.projectsegfau.lt',
-    'https://piped.lunar.icu',
+  
   ],
   hls: [],
   proxy: [],
   invidious: [
-    'https://inv.nadeko.net',
-    'https://y.com.sb',
-    'https://iv.melmac.space',
-    'https://zoomerville.com',
-    'https://inv.perditum.com',
-    'https://inv.vern.cc',
-    'https://invidious.nikkosphere.com',
-    'https://invidious.materialio.us',
+    "https://ytify.pp.ua",
+        "https://y.com.sb",
+        "https://inv.vern.cc",
+        "https://invidious.materialio.us",
+        "https://iv.melmac.space",
+        "https://inv.perditum.com",
+        "https://zoomerville.com"
   ],
   hyperpipe: [
-    'https://hyperpipeapi.darkness.services',
-    'https://hyperpipeapi.onrender.com',
-    'https://hyperpipebackend.eu.projectsegfau.lt',
-    'https://hyperpipebackend.in.projectsegfau.lt',
+     "https://hyperpipeapi.darkness.services",
+        "https://hyperpipeapi.onrender.com"
   ],
-  jiosaavn: 'https://jiosavan-ytify.vercel.app',
-  health: 'N',
+  jiosaavn: "https://saavn-ytify.vercel.app",
+  health: "Y"
 };
 

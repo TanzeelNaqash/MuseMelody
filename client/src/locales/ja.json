@@ -86,7 +86,17 @@
     "localFiles": "ローカルファイル",
     "downloads": "ダウンロード",
     "empty": "ライブラリが空です",
-    "startAdding": "音楽を追加してここに表示してください"
+    "startAdding": "音楽を追加してここに表示してください",
+    "requiresAccount": "ライブラリにアクセスするにはアカウントが必要です。プレイリストを保存して、アップロードした音楽を管理するには、サインインしてください。",
+    "signInToAccess": "サインインしてライブラリにアクセス"
+  },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب",
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
   },
   "playlist": {
     "createNew": "新しいプレイリストを作成",
@@ -103,6 +113,14 @@
     "duration": "時間",
     "createdBy": "作成者"
   },
+  "history": {
+    "requiresAccount": "履歴へのアクセスにはアカウントが必要です。履歴を保存して、あなたが聞いた曲を追跡し、あなたが止めた場所から続きを聞きましょう。",
+    "signInToAccess": "サインインして履歴にアクセス"
+  },
+  "createPlaylist": {
+    "requiresAccount": "プレイリストの作成にはアカウントが必要です。プレイリストを作成するにはサインインしてください。",
+    "signInToAccess": "サインインしてプレイリストにアクセス"
+  },
   "upload": {
     "title": "音楽をアップロード",
     "selectFiles": "オーディオファイルを選択",
@@ -111,7 +129,10 @@
     "maxSize": "最大ファイルサイズ: 50MB",
     "uploading": "アップロード中...",
     "uploadSuccess": "アップロード成功",
-    "uploadError": "アップロード失敗"
+    "uploadError": "アップロード失敗",
+    "requiresAccount": "音楽をアップロードするにはアカウントが必要です。",
+    "signInToAccess": "サインインしてアップロードにアクセス"
+
   },
   "auth": {
     "signIn": "サインイン",

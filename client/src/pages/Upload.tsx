@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Upload as UploadIcon, Music, X } from "lucide-react";
+import { Upload as UploadIcon, Music, X, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Upload() {
   const [file, setFile] = useState<File | null>(null);
@@ -13,6 +15,12 @@ export default function Upload() {
   const [artist, setArtist] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  // Guest Check
+  const userStr = localStorage.getItem("auth_user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isGuest = user?.id === "guest";
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -52,6 +60,36 @@ export default function Upload() {
       });
     },
   });
+
+  if (isGuest) {
+    return (
+      <div className="min-h-screen pb-32 px-6 pt-8">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-3xl font-bold text-foreground mb-8">Upload Music</h1>
+          <Card className="p-12 text-center border-dashed">
+            <Alert className="mb-6 border-none bg-transparent shadow-none">
+              <div className="flex justify-center mb-4">
+                <LogIn className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <AlertDescription className="text-lg text-muted-foreground">
+                {t('upload.requiresAccount') || "You need an account to upload music."}
+              </AlertDescription>
+            </Alert>
+            <Button 
+              onClick={() => {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+                window.location.reload();
+              }}
+              className="w-full max-w-sm"
+            >
+              {t('auth.signIn')}
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];

@@ -9,6 +9,8 @@ import { resolveBestAudioUrl, clearResolvedStreamCache } from "./streamResolver"
 import { request } from "undici";
 import { Readable } from "stream";
 import { uma } from './umaManager';
+import http from "http";
+import https from "https";
 
 const LYRICS_API_URL = "https://api.lyrics.ovh/v1";
 
@@ -25,30 +27,21 @@ const TRENDING_QUERIES: Array<{ query: string; weight: number }> = [
 const YOUTUBE_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
 
 // Map YouTube itag to MIME type for audio streams
+// This global function is the correct one to use
 function getMimeTypeFromItag(itag: string | null): string {
-  if (!itag) return 'audio/webm'; // Default fallback
+  if (!itag) return 'audio/webm'; 
   
   const itagNum = parseInt(itag, 10);
   
-  // Audio itags mapping
   const audioItags: Record<number, string> = {
-    // MP4/AAC audio
-    140: 'audio/mp4', // AAC 128kbps
-    141: 'audio/mp4', // AAC 256kbps
-    256: 'audio/mp4', // AAC
-    258: 'audio/mp4', // AAC
-    325: 'audio/mp4', // AAC
-    328: 'audio/mp4', // AAC
-    
-    // WebM/Opus audio
-    249: 'audio/webm', // Opus 50kbps
-    250: 'audio/webm', // Opus 70kbps
-    251: 'audio/webm', // Opus 160kbps
-    171: 'audio/webm', // WebM audio (Opus)
-    172: 'audio/webm', // WebM audio (Opus)
+    // MP4/AAC (Safari/iOS prefers this)
+    140: 'audio/mp4', 141: 'audio/mp4', 256: 'audio/mp4', 258: 'audio/mp4',
+    // WebM/Opus (Chrome/Android prefers this)
+    249: 'audio/webm', 250: 'audio/webm', 251: 'audio/webm', 171: 'audio/webm', 172: 'audio/webm',
   };
   
-  return audioItags[itagNum] || 'audio/webm';
+  // If it's a known audio itag, return audio mime. Otherwise assume video.
+  return audioItags[itagNum] || 'video/mp4'; 
 }
 
 function parseYouTubeId(value: string | undefined | null): string | null {
@@ -197,6 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
   });
 
+
   // Search from Piped (no YouTube API)
   app.get('/api/search', authenticateWithGuest, async (req, res) => {
     const q = String(req.query.q || '').trim();
@@ -208,7 +202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       .fetchJson<any>(
         'piped',
         (base) =>
-          `${base}/search?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}&filter=music_songs`,
+          `${base}/search?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}&filter=videos`,
         { strictStatus: true },
         {
           cacheKey: `search:${region}:${q.toLowerCase()}`,
@@ -259,7 +253,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.log('[SEARCH] Invidious instance used:', instance);
         }
         return (items ?? [])
-          .filter((item: any) => (item?.lengthSeconds ?? 0) >= 60)
+        .filter((item: any) => {
+          const duration = item?.lengthSeconds ?? 0;
+          return duration === 0 || duration >= 20; // allow short OSTs & trending
+        })
+        
           .map((item: any) => {
             const thumbnail = Array.isArray(item?.videoThumbnails)
               ? item.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
@@ -314,6 +312,521 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(combined.slice(0, 60));
   });
 
+  // Fetch YouTube playlist tracks
+  app.get('/api/youtube-playlist/:id', authenticateWithGuest, async (req, res) => {
+    const playlistId = req.params.id;
+    if (!playlistId) return res.status(400).json({ message: 'Playlist ID is required' });
+
+    try {
+      // Try Piped first
+      const pipedResult = await uma
+        .fetchJson<any>(
+          'piped',
+          (base) => `${base}/playlists/${encodeURIComponent(playlistId)}`,
+          { strictStatus: true },
+          {
+            cacheKey: `Youtubelist:${playlistId}`,
+            ttlMs: 1000 * 60 * 30,
+          },
+        )
+        .then((data) => {
+          const instance = uma.getLastSuccessfulInstance('piped');
+          if (instance) {
+            console.log('[YOUTUBE-PLAYLIST] Piped instance used:', instance);
+          }
+          const videos: any[] = Array.isArray(data?.relatedStreams) ? data.relatedStreams : [];
+          return videos.map((video) => ({
+            id: video?.url?.split('/').pop() || video?.url,
+            title: video?.title ?? 'Unknown Title',
+            artist: video?.uploaderName ?? 'Unknown Artist',
+            thumbnailUrl: video?.thumbnail ?? undefined,
+            duration: video?.duration ?? 0,
+          }));
+        })
+        .catch((error) => {
+          console.error('[YOUTUBE-PLAYLIST] Piped fetch failed:', error);
+          return null;
+        });
+
+      if (pipedResult) {
+        return res.json(pipedResult);
+      }
+
+      // Fallback to Invidious
+      const invidiousResult = await uma
+        .fetchJson<any>(
+          'invidious',
+          (base) => `${base}/api/v1/playlists/${encodeURIComponent(playlistId)}`,
+          { strictStatus: true },
+          {
+            cacheKey: `Youtubelist-invidious:${playlistId}`,
+            ttlMs: 1000 * 60 * 30,
+          },
+        )
+        .then((data) => {
+          const instance = uma.getLastSuccessfulInstance('invidious');
+          if (instance) {
+            console.log('[YOUTUBE-PLAYLIST] Invidious instance used:', instance);
+          }
+          const videos: any[] = Array.isArray(data?.videos) ? data.videos : [];
+          return videos.map((video) => ({
+            id: video?.videoId,
+            title: video?.title ?? 'Unknown Title',
+            artist: video?.author ?? 'Unknown Artist',
+            thumbnailUrl: Array.isArray(video?.videoThumbnails)
+              ? video.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')?.url ||
+                video.videoThumbnails[0]?.url
+              : undefined,
+            duration: video?.lengthSeconds ?? 0,
+          }));
+        })
+        .catch((error) => {
+          console.error('[YOUTUBE-PLAYLIST] Invidious fetch failed:', error);
+          return null;
+        });
+
+      if (invidiousResult) {
+        return res.json(invidiousResult);
+      }
+
+      res.status(404).json({ message: 'Playlist not found' });
+    } catch (error) {
+      console.error('[YOUTUBE-PLAYLIST] Error:', error);
+      res.status(500).json({ message: 'Failed to fetch playlist' });
+    }
+  });
+
+  // Featured playlist endpoint - get a single playlist by search query with tracks
+  app.get('/api/featured-playlist', authenticateWithGuest, async (req, res) => {
+    const query = String(req.query.query || '').trim();
+    if (!query) return res.status(400).json({ message: 'Query is required' });
+
+    const region = String(req.query.region || DEFAULT_REGION);
+
+    try {
+      // Try Piped first (supports playlist search)
+      const pipedResult = await uma
+        .fetchJson<any>(
+          'piped',
+          (base) =>
+            `${base}/search?q=${encodeURIComponent(query)}&region=${encodeURIComponent(region)}&filter=playlists`,
+          { strictStatus: true },
+          {
+            cacheKey: `featured-playlist:${region}:${query}`,
+            ttlMs: 1000 * 60 * 30, // Cache for 30 minutes
+          },
+        )
+        .then(async (data) => {
+          const instance = uma.getLastSuccessfulInstance('piped');
+          if (instance) {
+            console.log('[FEATURED-PLAYLIST] Piped instance used:', instance);
+          }
+          const items: any[] = Array.isArray(data?.items) ? data.items : [];
+          const firstPlaylist = items[0];
+          
+          if (!firstPlaylist) {
+            return null;
+          }
+
+          // Extract playlist ID from URL - handle formats like:
+          // "/playlist?list=PLxxx" or "playlist?list=PLxxx" or just "PLxxx"
+          let playlistId: string | null = null;
+          if (typeof firstPlaylist?.url === 'string') {
+            const url = firstPlaylist.url;
+            // Try to extract from query parameter
+            const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+            if (listMatch) {
+              playlistId = listMatch[1];
+            } else {
+              // Fallback to last path segment
+              playlistId = url.split('/').pop() || null;
+              // Remove query string if present
+              if (playlistId && playlistId.includes('?')) {
+                playlistId = playlistId.split('?')[0];
+              }
+            }
+          } else if (firstPlaylist?.url) {
+            playlistId = String(firstPlaylist.url);
+          }
+          
+          if (!playlistId || playlistId.startsWith('channel-')) {
+            return {
+              id: playlistId || 'unknown',
+              title: firstPlaylist?.title ?? 'Unknown Playlist',
+              description: firstPlaylist?.description ?? '',
+              thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
+              uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
+              tracks: [],
+            };
+          }
+
+          // Fetch playlist tracks
+          try {
+            const playlistData = await uma.fetchJson<any>(
+              'piped',
+              (base) => `${base}/playlists/${encodeURIComponent(playlistId!)}`,
+              { strictStatus: false },
+              {
+                cacheKey: `playlist-tracks:${playlistId}`,
+                ttlMs: 1000 * 60 * 30,
+              },
+            );
+
+            // Get playlist info from the actual playlist data
+            const playlistTitle = playlistData?.name || playlistData?.title || firstPlaylist?.title || 'Unknown Playlist';
+            const playlistDescription = playlistData?.description || firstPlaylist?.description || '';
+            
+            // Get best quality playlist thumbnail
+            let playlistThumbnail: string | undefined = undefined;
+            if (playlistData?.thumbnailUrl) {
+              playlistThumbnail = playlistData.thumbnailUrl;
+            } else if (playlistData?.thumbnail) {
+              playlistThumbnail = playlistData.thumbnail;
+            } else if (Array.isArray(playlistData?.thumbnails)) {
+              const bestThumb = playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'maxres')
+                || playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'high')
+                || playlistData.thumbnails[0];
+              playlistThumbnail = bestThumb?.url || bestThumb;
+            } else if (firstPlaylist?.thumbnail) {
+              playlistThumbnail = firstPlaylist.thumbnail;
+            }
+            const playlistUploader = playlistData?.uploaderName || playlistData?.uploader || firstPlaylist?.uploaderName || 'Unknown';
+
+            const videos: any[] = Array.isArray(playlistData?.relatedStreams) ? playlistData.relatedStreams : [];
+            const tracks = videos.slice(0, 100).map((video) => {
+              const videoId = video?.url?.split('/').pop() || video?.url;
+              
+              // Get best quality thumbnail
+              let thumbnail: string | undefined = undefined;
+              if (video?.thumbnail) {
+                thumbnail = video.thumbnail;
+              } else if (Array.isArray(video?.thumbnails)) {
+                // Find best quality thumbnail
+                const bestThumb = video.thumbnails.find((thumb: any) => thumb?.quality === 'maxres') 
+                  || video.thumbnails.find((thumb: any) => thumb?.quality === 'high') 
+                  || video.thumbnails.find((thumb: any) => thumb?.quality === 'medium')
+                  || video.thumbnails[0];
+                thumbnail = bestThumb?.url || bestThumb;
+              }
+              
+              return {
+                id: videoId,
+                youtubeId: videoId,
+                title: video?.title ?? 'Unknown Title',
+                artist: video?.uploaderName ?? video?.uploader ?? 'Unknown Artist',
+                thumbnail: thumbnail,
+                duration: typeof video?.duration === 'number' ? video.duration : (typeof video?.duration === 'string' ? parseInt(video.duration, 10) : 0),
+                source: 'youtube' as const,
+              };
+            });
+
+            // Fallback to first track thumbnail if available
+            if (!playlistThumbnail && tracks.length > 0 && tracks[0]?.thumbnail) {
+              playlistThumbnail = tracks[0].thumbnail;
+            }
+
+            return {
+              id: playlistId,
+              title: playlistTitle,
+              description: playlistDescription,
+              thumbnailUrl: playlistThumbnail || tracks[0]?.thumbnail || undefined,
+              uploaderName: playlistUploader,
+              tracks,
+            };
+          } catch (error) {
+            console.warn(`[FEATURED-PLAYLIST] Failed to fetch tracks for playlist ${playlistId}:`, error);
+            return {
+              id: playlistId,
+              title: firstPlaylist?.title ?? 'Unknown Playlist',
+              description: firstPlaylist?.description ?? '',
+              thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
+              uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
+              tracks: [],
+            };
+          }
+        })
+        .catch((error) => {
+          console.error('[FEATURED-PLAYLIST] Piped search failed:', error);
+          return null;
+        });
+
+      // Fallback to Invidious (search for videos and create playlist-like result)
+      if (!pipedResult) {
+        const invidiousResult = await uma
+          .fetchJson<any[]>(
+            'invidious',
+            (base) =>
+              `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&region=${encodeURIComponent(region)}`,
+            { strictStatus: true },
+            {
+              cacheKey: `featured-playlist-invidious:${region}:${query}`,
+              ttlMs: 1000 * 60 * 30,
+            },
+          )
+          .then((items) => {
+            const instance = uma.getLastSuccessfulInstance('invidious');
+            if (instance) {
+              console.log('[FEATURED-PLAYLIST] Invidious instance used:', instance);
+            }
+            
+            if (!items || items.length === 0) {
+              return null;
+            }
+
+            // Take first 50 videos and create a playlist
+            const videos = items.slice(0, 50);
+            const firstVideo = videos[0];
+            const thumbnail = Array.isArray(firstVideo?.videoThumbnails)
+              ? firstVideo.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
+                firstVideo.videoThumbnails[0]?.url
+              : undefined;
+            
+            const tracks = videos.map((v: any) => {
+              // Get best quality thumbnail
+              let thumbnail: string | undefined = undefined;
+              if (Array.isArray(v?.videoThumbnails)) {
+                const bestThumb = v.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')
+                  || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'high')
+                  || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')
+                  || v.videoThumbnails[0];
+                thumbnail = bestThumb?.url;
+              }
+              
+              return {
+                id: v.videoId,
+                youtubeId: v.videoId,
+                title: v.title ?? 'Unknown Title',
+                artist: v.author ?? 'Unknown Artist',
+                thumbnail: thumbnail,
+                duration: v.lengthSeconds ?? 0,
+                source: 'youtube' as const,
+              };
+            });
+
+            return {
+              id: `search-${query}`,
+              title: query,
+              description: `${videos.length} tracks`,
+              thumbnailUrl: thumbnail || tracks[0]?.thumbnail,
+              uploaderName: firstVideo?.author ?? 'Unknown',
+              tracks,
+            };
+          })
+          .catch((error) => {
+            console.error('[FEATURED-PLAYLIST] Invidious search failed:', error);
+            return null;
+          });
+
+        if (invidiousResult) {
+          return res.json(invidiousResult);
+        }
+      }
+
+      if (pipedResult) {
+        return res.json(pipedResult);
+      }
+
+      res.status(404).json({ message: 'Playlist not found' });
+    } catch (error) {
+      console.error('[FEATURED-PLAYLIST] Error:', error);
+      res.status(500).json({ message: 'Failed to fetch featured playlist' });
+    }
+  });
+
+  // Featured playlists endpoint - search for YouTube playlists by category with tracks
+  app.get('/api/featured-playlists', authenticateWithGuest, async (req, res) => {
+    const category = String(req.query.category || '').trim();
+    if (!category) return res.status(400).json({ message: 'Category is required' });
+
+    const region = String(req.query.region || DEFAULT_REGION);
+
+    // Featured playlist search queries
+    const categoryQueries: Record<string, string> = {
+      'hindi-essentials': 'hindi essentials playlist',
+      'hip-hop-essentials': 'hip hop essentials playlist',
+      'classical': 'classical music playlist',
+      'english': 'english hits playlist',
+      'punjabi': 'punjabi hits playlist',
+      'mix-hits': 'mix hits playlist',
+      'electronics': 'electronic music playlist',
+      'kpop': 'kpop playlist',
+    };
+
+    const searchQuery = categoryQueries[category] || category;
+
+    try {
+      // Try Piped first (supports playlist search)
+      const pipedResult = await uma
+        .fetchJson<any>(
+          'piped',
+          (base) =>
+            `${base}/search?q=${encodeURIComponent(searchQuery)}&region=${encodeURIComponent(region)}&filter=playlists`,
+          { strictStatus: true },
+          {
+            cacheKey: `featured-playlists:${region}:${category}`,
+            ttlMs: 1000 * 60 * 30, // Cache for 30 minutes
+          },
+        )
+        .then(async (data) => {
+          const instance = uma.getLastSuccessfulInstance('piped');
+          if (instance) {
+            console.log('[FEATURED-PLAYLISTS] Piped instance used:', instance);
+          }
+          const items: any[] = Array.isArray(data?.items) ? data.items : [];
+          const playlists = items.slice(0, 10);
+          
+          // Fetch tracks for each playlist
+          const playlistsWithTracks = await Promise.all(
+            playlists.map(async (item) => {
+              const playlistId = typeof item?.url === 'string'
+                ? item.url.split('/').pop() || item.url
+                : item?.url;
+              
+              if (!playlistId || playlistId.startsWith('channel-')) {
+                return {
+                  id: playlistId,
+                  title: item?.title ?? 'Unknown Playlist',
+                  description: item?.description ?? '',
+                  thumbnailUrl: item?.thumbnail ?? undefined,
+                  videoCount: item?.videos ?? 0,
+                  uploaderName: item?.uploaderName ?? 'Unknown',
+                  tracks: [],
+                };
+              }
+
+              // Fetch playlist tracks
+              try {
+                const playlistData = await uma.fetchJson<any>(
+                  'piped',
+                  (base) => `${base}/playlists/${encodeURIComponent(playlistId)}`,
+                  { strictStatus: false },
+                  {
+                    cacheKey: `playlist-tracks:${playlistId}`,
+                    ttlMs: 1000 * 60 * 30,
+                  },
+                );
+
+                const videos: any[] = Array.isArray(playlistData?.relatedStreams) ? playlistData.relatedStreams : [];
+                const tracks = videos.slice(0, 50).map((video) => {
+                  const videoId = video?.url?.split('/').pop() || video?.url;
+                  return {
+                    id: videoId,
+                    youtubeId: videoId,
+                    title: video?.title ?? 'Unknown Title',
+                    artist: video?.uploaderName ?? 'Unknown Artist',
+                    thumbnail: video?.thumbnail ?? undefined,
+                    duration: video?.duration ?? 0,
+                    source: 'youtube' as const,
+                  };
+                });
+
+                return {
+                  id: playlistId,
+                  title: item?.title ?? 'Unknown Playlist',
+                  description: item?.description ?? '',
+                  thumbnailUrl: item?.thumbnail ?? undefined,
+                  videoCount: tracks.length || (item?.videos ?? 0),
+                  uploaderName: item?.uploaderName ?? 'Unknown',
+                  tracks,
+                };
+              } catch (error) {
+                console.warn(`[FEATURED-PLAYLISTS] Failed to fetch tracks for playlist ${playlistId}:`, error);
+                return {
+                  id: playlistId,
+                  title: item?.title ?? 'Unknown Playlist',
+                  description: item?.description ?? '',
+                  thumbnailUrl: item?.thumbnail ?? undefined,
+                  videoCount: item?.videos ?? 0,
+                  uploaderName: item?.uploaderName ?? 'Unknown',
+                  tracks: [],
+                };
+              }
+            })
+          );
+
+          return playlistsWithTracks;
+        })
+        .catch((error) => {
+          console.error('[FEATURED-PLAYLISTS] Piped search failed:', error);
+          return [];
+        });
+
+      // Fallback to Invidious (search for videos and create playlist-like results)
+      if (pipedResult.length === 0) {
+        const invidiousResult = await uma
+          .fetchJson<any[]>(
+            'invidious',
+            (base) =>
+              `${base}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&region=${encodeURIComponent(region)}`,
+            { strictStatus: true },
+            {
+              cacheKey: `featured-playlists-invidious:${region}:${category}`,
+              ttlMs: 1000 * 60 * 30,
+            },
+          )
+          .then((items) => {
+            const instance = uma.getLastSuccessfulInstance('invidious');
+            if (instance) {
+              console.log('[FEATURED-PLAYLISTS] Invidious instance used:', instance);
+            }
+            // Group videos by channel and create playlist-like results
+            const channelMap = new Map<string, any[]>();
+            (items ?? []).forEach((item: any) => {
+              const channel = item?.authorId || 'unknown';
+              if (!channelMap.has(channel)) {
+                channelMap.set(channel, []);
+              }
+              channelMap.get(channel)!.push(item);
+            });
+
+            return Array.from(channelMap.entries())
+              .slice(0, 10)
+              .map(([channelId, videos]) => {
+                const firstVideo = videos[0];
+                const thumbnail = Array.isArray(firstVideo?.videoThumbnails)
+                  ? firstVideo.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
+                    firstVideo.videoThumbnails[0]?.url
+                  : undefined;
+                
+                const tracks = videos.slice(0, 50).map((v: any) => ({
+                  id: v.videoId,
+                  youtubeId: v.videoId,
+                  title: v.title ?? 'Unknown Title',
+                  artist: v.author ?? 'Unknown Artist',
+                  thumbnail: Array.isArray(v?.videoThumbnails)
+                    ? v.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')?.url ||
+                      v.videoThumbnails[0]?.url
+                    : undefined,
+                  duration: v.lengthSeconds ?? 0,
+                  source: 'youtube' as const,
+                }));
+
+                return {
+                  id: `channel-${channelId}`,
+                  title: `${firstVideo?.author ?? 'Unknown'} - ${category}`,
+                  description: `${videos.length} videos from ${firstVideo?.author ?? 'Unknown'}`,
+                  thumbnailUrl: thumbnail || tracks[0]?.thumbnail,
+                  videoCount: tracks.length,
+                  uploaderName: firstVideo?.author ?? 'Unknown',
+                  tracks,
+                };
+              });
+          })
+          .catch((error) => {
+            console.error('[FEATURED-PLAYLISTS] Invidious search failed:', error);
+            return [];
+          });
+
+        return res.json(invidiousResult);
+      }
+
+      res.json(pipedResult);
+    } catch (error) {
+      console.error('[FEATURED-PLAYLISTS] Error:', error);
+      res.status(500).json({ message: 'Failed to fetch featured playlists' });
+    }
+  });
+
   // Trending catalog powered by Piped (with fallback search heuristic)
   app.get('/api/trending', authenticateWithGuest, async (req, res) => {
     const region = String(req.query.region || DEFAULT_REGION);
@@ -327,6 +840,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       duration: number;
       source: 'youtube';
     }> = [];
+    
 
     // Comprehensive list of non-music keywords
     const nonMusicKeywords = [
@@ -607,316 +1121,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(tracks.slice(0, 40));
   });
 
-  // Resolve best audio URL (server-side) to avoid CORS
+  // --- BEST STREAM RESOLVER ---
   app.get('/api/streams/:id/best', authenticateWithGuest, async (req, res) => {
     try {
       const youtubeId = req.params.id;
       const preferredSource = typeof req.query.source === 'string' ? (req.query.source.toLowerCase() as 'piped' | 'invidious') : undefined;
       const preferredInstance = typeof req.query.instance === 'string' ? req.query.instance : undefined;
       const resolved = await resolveBestAudioUrl(youtubeId, preferredSource, preferredInstance);
+      
       if (!resolved?.url) {
-        try {
-          console.warn('[STREAM] No stream available for id:', youtubeId, 'last piped:', uma.getLastSuccessfulInstance('piped') || 'unknown', 'last invidious:', uma.getLastSuccessfulInstance('invidious') || 'unknown');
-        } catch {}
         return res.status(404).json({ 
           message: 'No stream available',
-          error: 'All streaming sources failed. Please try again later or try switching location using VPN.',
+          error: 'All streaming sources failed. Please try again later.',
         });
       }
 
-      // Get the instance that was used to fetch this stream
       const usedInstance = uma.getLastSuccessfulInstance(resolved.source);
-      const proxiedUrl = `/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(resolved.url)}&source=${resolved.source}${usedInstance ? `&instance=${encodeURIComponent(usedInstance)}` : ''}`;
+
+      // Helper to build proxy URL
+      const makeProxyUrl = (rawUrl: string) => 
+        `/api/streams/${encodeURIComponent(youtubeId)}/proxy?src=${encodeURIComponent(rawUrl)}&source=${resolved.source}${usedInstance ? `&instance=${encodeURIComponent(usedInstance)}` : ""}`;
+
+      const proxiedUrl = resolved.url ? makeProxyUrl(resolved.url) : null;
+      const proxiedManifestUrl = resolved.manifestUrl ? makeProxyUrl(resolved.manifestUrl) : null;
+      
+      const videoStreams = (resolved.videoStreams ?? []).map((s) => ({
+        ...s,
+        proxiedUrl: s.url ? makeProxyUrl(s.url) : null,
+      }));
+      
+      const audioStreams = (resolved.audioStreams ?? []).map((s) => ({
+        ...s,
+        proxiedUrl: s.url ? makeProxyUrl(s.url) : null,
+      }));
+      
       res.json({
         url: resolved.url,
         proxiedUrl,
-        manifestUrl: resolved.manifestUrl,
+        manifestUrl: proxiedManifestUrl,
         mimeType: resolved.mimeType,
         origin: resolved.source,
         instance: usedInstance,
+        videoStreams,
+        audioStreams,
       });
+      
     } catch (e: any) {
       console.error('Resolve stream failed:', e);
       res.status(500).json({ 
         message: 'Failed to resolve stream',
-        error: 'Unable to load stream. Please try again later or try switching location using VPN.',
+        error: 'Unable to load stream.',
       });
     }
   });
 
-  // Proxy the audio stream through our server (no CORS on client)
+  // --- PROXY ENDPOINT (FIXED FOR PIPED & INVIDIOUS AUDIO) ---
   app.get('/api/streams/:id/proxy', authenticateWithGuest, async (req, res) => {
-    let src = req.query.src as string;
-    if (!src) return res.status(400).json({ message: 'Missing src' });
-
-    const youtubeId = req.params.id;
-    const source = (req.query.source as string)?.toLowerCase() as 'piped' | 'invidious' | undefined;
-    const instance = req.query.instance as string | undefined;
-
-    // Decode the URL (it comes encoded from query params)
+    const startTime = Date.now();
+    const MAX_PROXY_TIME = 25000; 
+    
     try {
-      src = decodeURIComponent(src);
-    } catch {
-      // If decoding fails, use as-is
-    }
+      let src = req.query.src as string;
+      if (!src) return res.status(400).json({ message: 'Missing src' });
 
-    // Helper function to attempt proxying a stream URL using undici
-    const attemptProxy = async (streamUrl: string): Promise<{ success: boolean; response?: any; error?: any; statusCode?: number; needsContentTypeOverride?: boolean }> => {
-      // Build headers for Google Video - must match browser exactly
+      // Decode the URL
+      try { src = decodeURIComponent(src); } catch {}
+
+      // Headers for upstream request
       const headers: Record<string, string> = {
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'accept': 'audio/webm,audio/ogg,audio/*;q=0.9,application/ogg;q=0.7,video/*;q=0.6,*/*;q=0.5',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'accept': '*/*',
         'accept-language': 'en-US,en;q=0.9',
-        'accept-encoding': 'identity', // Don't compress, we're streaming
-        'referer': 'https://www.youtube.com/',
-        'origin': 'https://www.youtube.com',
-        'cache-control': 'no-cache',
-        'pragma': 'no-cache',
-        'sec-fetch-dest': 'audio',
-        'sec-fetch-mode': 'no-cors',
-        'sec-fetch-site': 'cross-site',
+        'accept-encoding': 'identity',
       };
 
-      // Forward Range header if present (critical for streaming)
+      // Forward Range Header (Critical for seeking & streaming)
       const rangeHeader = req.headers['range'] || req.headers['Range'];
       if (rangeHeader) {
         headers['range'] = String(rangeHeader);
       }
 
-      try {
-        // Use undici's request method which returns a proper Node.js stream
-        const { statusCode, headers: responseHeaders, body } = await request(streamUrl, {
-          headers,
-          method: 'GET',
-          maxRedirections: 5,
-        });
-
-        // Early detection: Check status and content-type
-        const contentType = responseHeaders['content-type'] || '';
-        const isTextPlain = String(contentType).toLowerCase().includes('text/plain');
-        const isGoogleVideo = streamUrl.includes('googlevideo.com');
-        
-        // If 403, abort early and clean up
-        if (statusCode === 403) {
-          // Add error handler to prevent unhandled errors
-          body.on('error', () => {
-            // Silently handle errors when cleaning up
-          });
-          
-          // Drain the stream instead of destroying to avoid unhandled errors
-          // This consumes the body without storing it
-          body.resume();
-          
-          // Set a timeout to destroy after draining
-          setTimeout(() => {
-            try {
-              if (!body.destroyed) {
-                body.destroy();
-              }
-            } catch (e) {
-              // Ignore destroy errors
-            }
-          }, 1000);
-          
-          return { success: false, error: '403 Forbidden', statusCode: 403 };
-        }
-        
-        // Add error handler for successful responses too
-        body.on('error', () => {
-          // Silently handle stream errors - they'll be caught in the main handler
-        });
-        
-        // If text/plain from googlevideo.com with 200 status, override content-type
-        if (statusCode === 200 && isTextPlain && isGoogleVideo) {
-          return { 
-            success: true, 
-            response: { status: statusCode, headers: responseHeaders, body }, 
-            needsContentTypeOverride: true 
-          };
-        }
-
-        return { 
-          success: true, 
-          response: { status: statusCode, headers: responseHeaders, body } 
-        };
-      } catch (error: any) {
-        // Check if error has status code
-        const statusCode = error.statusCode || error.status || (error.code === 'ECONNREFUSED' ? 503 : undefined);
-        return { success: false, error: error.message || error, statusCode };
-      }
-    };
-
-    // Try the provided URL first
-    let result = await attemptProxy(src);
-    
-    // If failed, try re-fetching from the same source
-    if (!result.success && source) {
-      console.log(`[PROXY] Initial attempt failed, clearing cache and re-fetching from ${source}...`);
-      clearResolvedStreamCache(youtubeId);
-      try {
-        const resolved = await resolveBestAudioUrl(youtubeId, source, instance);
-        if (resolved?.url && resolved.url !== src) {
-          console.log(`[PROXY] Got new URL from ${source}, attempting proxy...`);
-          result = await attemptProxy(resolved.url);
-          if (result.success) {
-            src = resolved.url;
-          }
-        }
-      } catch (error) {
-        console.warn(`[PROXY] Re-fetch from ${source} failed:`, error);
-      }
-    }
-
-    // If still failed, try alternative sources
-    if (!result.success && source) {
-      const altSource = source === 'piped' ? 'invidious' : 'piped';
-      console.log(`[PROXY] Trying alternative source: ${altSource}...`);
-      clearResolvedStreamCache(youtubeId);
-      try {
-        const resolved = await resolveBestAudioUrl(youtubeId, altSource);
-        if (resolved?.url) {
-          result = await attemptProxy(resolved.url);
-          if (result.success) {
-            src = resolved.url;
-          }
-        }
-      } catch (error) {
-        console.warn(`[PROXY] Alternative source ${altSource} failed:`, error);
-      }
-    }
-
-    // If all attempts failed, return error
-    if (!result.success || !result.response) {
-      console.error('[PROXY] All attempts failed:', {
-        success: result.success,
-        error: result.error,
-        statusCode: result.statusCode,
-        hasResponse: !!result.response,
-        status: result.response?.status,
-        youtubeId,
-        source,
-        instance,
+      // --- EXECUTE REQUEST ---
+      const { statusCode, headers: responseHeaders, body } = await request(src, {
+        method: 'GET',
+        headers,
+        maxRedirections: 5,
+        bodyTimeout: 15000,
+        headersTimeout: 8000,
       });
-      
-      // Check for 403 errors from statusCode or response status
-      if (result.statusCode === 403 || result.response?.status === 403) {
-        return res.status(403).json({ 
-          message: 'Access denied by video provider',
-          error: 'Unable to access stream. The video provider has blocked access. Please try again later or try switching location using VPN.',
-        });
+
+      // Handle Errors
+      if (statusCode >= 400) {
+        if (body && typeof body.destroy === 'function') body.destroy();
+        return res.status(statusCode).json({ message: 'Upstream error', status: statusCode });
       }
+
+      // --- CRITICAL FIX: CONTENT-TYPE FORCING ---
+      let contentType = String(responseHeaders['content-type'] || '');
       
-      // Check for other specific HTTP errors
-      if (result.statusCode && result.statusCode >= 400 && result.statusCode < 500) {
-        return res.status(result.statusCode).json({ 
-          message: 'Stream access error',
-          error: result.error || 'Unable to access stream. Please try again later.',
-        });
-      }
-      
-      return res.status(500).json({ 
-        message: 'Proxy error',
-        error: 'Unable to proxy stream. Please try again later.',
-      });
-    }
-
-    const upstream = result.response;
-
-    // Forward status code
-    res.status(upstream.status);
-
-    // Handle content-type override for text/plain responses from googlevideo.com
-    let contentType = String(upstream.headers['content-type'] || '');
-    if (result.needsContentTypeOverride && src.includes('googlevideo.com')) {
+      // Attempt to extract 'itag' from the source URL to determine the REAL content type
+      // This works for Piped URLs (query param 'format' or 'itag') and Google URLs
       try {
         const urlObj = new URL(src);
-        const itag = urlObj.searchParams.get('itag');
-        const correctMimeType = getMimeTypeFromItag(itag);
-        console.warn(`[PROXY] googlevideo.com returned text/plain → overriding to ${correctMimeType} (itag: ${itag || 'unknown'})`);
-        contentType = correctMimeType;
-      } catch (error) {
-        console.warn('[PROXY] Failed to parse URL for itag, using default audio/webm');
-        contentType = 'audio/webm';
-      }
-    }
-
-    // Forward relevant response headers
-    const headersToForward = [
-      'content-length',
-      'accept-ranges',
-      'content-range',
-      'etag',
-      'last-modified',
-      'cache-control'
-    ];
-
-    Object.entries(upstream.headers).forEach(([key, value]: [string, any]) => {
-      const lowerKey = key.toLowerCase();
-      if (headersToForward.includes(lowerKey)) {
-        res.setHeader(key, String(value));
-      }
-    });
-
-    // Set content-type (overridden if needed)
-    res.setHeader('Content-Type', contentType);
-    
-    // Handle Content-Range for partial content (206)
-    if (upstream.status === 206) {
-      const contentRange = upstream.headers['content-range'];
-      if (contentRange) {
-        res.setHeader('Content-Range', String(contentRange));
-      }
-    }
-
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Range');
-    res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Accept-Ranges, Content-Length');
-
-    // Stream the response body using undici's body stream (which is a Node.js Readable stream)
-    try {
-      if (!upstream.body) {
-        console.warn('[PROXY] No body in response');
-        return res.end();
-      }
-
-      // undici's request returns body as a Node.js Readable stream
-      const bodyStream = upstream.body as Readable;
-      
-      // Pipe the stream to the response
-      bodyStream.pipe(res);
-      
-      // Handle stream errors
-      bodyStream.on('error', (streamError: any) => {
-        console.error('[PROXY] Stream error:', streamError);
-        if (!res.headersSent) {
-          res.status(500).json({ 
-            message: 'Stream error',
-            error: 'Error while streaming content.',
-          });
-        } else {
-          res.end();
-        }
-      });
-
-      // Handle response end/close
-      res.on('close', () => {
-        if (bodyStream && typeof bodyStream.destroy === 'function') {
-          try {
-            bodyStream.destroy();
-          } catch (destroyError) {
-            // Ignore destroy errors
+        // Piped often puts the itag in 'format' (e.g. format=251) or 'itag'
+        const itag = urlObj.searchParams.get('itag') || urlObj.searchParams.get('format');
+        
+        if (itag) {
+          const forcedMime = getMimeTypeFromItag(itag);
+          
+          // Force audio mime type if:
+          // 1. The original type is generic (octet-stream)
+          // 2. The original type is wrong (text/plain - common Google bug)
+          // 3. We detected the stream is definitely audio (itag is in our list)
+          if (
+            contentType === 'application/octet-stream' || 
+            contentType === 'text/plain' || 
+            forcedMime.startsWith('audio/')
+          ) {
+            console.log(`[PROXY] Forcing Content-Type: ${contentType} -> ${forcedMime} (itag: ${itag})`);
+            contentType = forcedMime;
           }
         }
-      });
-    } catch (streamError: any) {
-      console.error('[PROXY] Failed to pipe stream:', streamError);
-      if (!res.headersSent) {
-        return res.status(500).json({ 
-          message: 'Stream error',
-          error: 'Failed to stream content.',
-        });
+      } catch (e) {
+        // Ignore URL parsing errors
       }
-      res.end();
+
+      // --- SEND HEADERS ---
+      res.status(statusCode);
+      res.setHeader('Content-Type', contentType); // Use our fixed content-type
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      // Forward specific headers
+      const forwardHeaders = ['content-length', 'content-range', 'accept-ranges', 'cache-control', 'last-modified'];
+      forwardHeaders.forEach(h => {
+        if (responseHeaders[h]) res.setHeader(h, String(responseHeaders[h]));
+      });
+
+      // --- PIPE STREAM ---
+      if (!body) return res.end();
+      
+      const stream = body as Readable;
+      stream.pipe(res);
+
+      stream.on('error', (err) => {
+        console.error('[PROXY] Stream Error:', err);
+        if (!res.headersSent) res.status(500).end();
+        else res.end();
+      });
+
+      res.on('close', () => {
+        if (stream.destroy) stream.destroy();
+      });
+
+    } catch (error: any) {
+      console.error('[PROXY] System Error:', error);
+      if (!res.headersSent) res.status(500).json({ message: 'Internal Proxy Error' });
     }
   });
 
@@ -1195,4 +1554,3 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   return httpServer;
 }
-

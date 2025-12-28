@@ -107,6 +107,15 @@
     "searchAndDownload": "Rechercher et Télécharger",
     "loadingPlaylists": "Chargement des playlists...",
     "loadingLocalFiles": "Chargement des fichiers locaux..."
+    
+  },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب",
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
   },
   "playlist": {
     "createNew": "Créer une Nouvelle Playlist",
@@ -131,7 +140,9 @@
     "maxSize": "Taille max : 50MB",
     "uploading": "Téléchargement...",
     "uploadSuccess": "Téléchargement réussi",
-    "uploadError": "Échec du téléchargement"
+    "uploadError": "Échec du téléchargement",
+    "requiresAccount": "Vous avez besoin d'un compte pour télécharger de la musique.",
+    "signInToAccess": "Se Connecter pour Accéder au Téléchargement"
   },
   "auth": {
     "signIn": "Se Connecter",
@@ -193,6 +204,15 @@
     "ctaSubtitle": "Rejoignez maintenant et créez votre expérience musicale personnalisée",
     "signInToContinue": "Se Connecter pour Continuer"
   },
+  "history": {
+    "requiresAccount": "L'accès à l'historique nécessite un compte. Connectez-vous pour enregistrer votre historique de lecture et continuer où vous l'avez laissé.",
+    "signInToAccess": "Se Connecter pour Accéder à l'Historique"
+  },
+  "createPlaylist": {
+    "requiresAccount": "La création d'une playlist nécessite un compte. Connectez-vous pour créer des playlists.",
+    "signInToAccess": "Se Connecter pour Accéder aux Playlists"
+  },
+  
   "settings": {
     "settings": "Paramètres",
     "language": "Langue",

@@ -16,6 +16,7 @@ import {
   Loader2,
   X,
   Music2,
+  
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -199,10 +200,15 @@ export function PlayerBar() {
     }
   };
 
+  // --- HANDLE CLOSE ---
+  const handleClosePlayer = () => {
+    setCurrentTrack(null); // This clears the track and effectively closes the player
+  };
+
   if (!currentTrack) return null;
 
   return (
-    <div className="fixed bottom-4 left-0 right-0 z-50 px-3 pb-1 sm:px-6">
+    <div className="fixed bottom-20 left-0 right-0 z-50 px-3 pb-1 sm:px-6 md:bottom-4">
       {/* Queue Panel - Outside overflow container */}
       <AnimatePresence>
         {showQueuePanel && (
@@ -508,7 +514,13 @@ export function PlayerBar() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={toggleFullscreen}
+            onClick={() => {
+              toggleFullscreen();
+              // When entering fullscreen, open video modal if video is available
+              if (!isFullscreen && currentTrack?.source === 'youtube' && !audioOnlyMode) {
+                setVideoModalOpen(true);
+              }
+            }}
             className="h-9 w-9 rounded-full bg-white/5 text-foreground transition-colors hover:bg-white/15"
             data-testid="button-fullscreen"
           >
@@ -566,6 +578,18 @@ export function PlayerBar() {
               </div>
             )}
           </div>
+
+          {/* --- NEW CLOSE BUTTON --- */}
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={handleClosePlayer}
+            className="h-9 w-9 rounded-full bg-white/5 text-foreground transition-colors hover:bg-red-500/20 hover:text-red-400"
+            data-testid="button-close"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+
         </div>
         </div>
       </motion.div>

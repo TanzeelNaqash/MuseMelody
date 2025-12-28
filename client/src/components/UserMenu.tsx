@@ -12,10 +12,12 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { LogOut, User, Settings } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'wouter';
 
 export function UserMenu() {
   const { user, logout } = useAuth();
   const { t } = useTranslation();
+  const [, setLocation] = useLocation();
 
   if (!user) return null;
 
@@ -51,10 +53,21 @@ export function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user.profileImageUrl || undefined} alt={getDisplayName()} />
-            <AvatarFallback>{getInitials(user.firstName, user.lastName)}</AvatarFallback>
-          </Avatar>
+        <Avatar className="h-8 w-8">
+  <AvatarImage 
+    src={
+      user.profileImageUrl && 
+      !user.profileImageUrl.includes("picture/1") && 
+      !user.profileImageUrl.includes("picture/3") 
+        ? user.profileImageUrl 
+        : undefined
+    } 
+    alt={getDisplayName()} 
+  />
+  <AvatarFallback>
+    {getInitials(user.firstName, user.lastName)}
+  </AvatarFallback>
+</Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -68,19 +81,19 @@ export function UserMenu() {
             )}
             {user.isEmailVerified === false && (
               <p className="text-xs text-amber-600">
-                Email not verified
+                {t('auth.emailNotVerified')}
               </p>
             )}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setLocation('/profile')}>
           <User className="mr-2 h-4 w-4" />
-          <span>Profile</span>
+          <span>{t('profile.profile')}</span>
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setLocation('/settings')}>
           <Settings className="mr-2 h-4 w-4" />
-          <span>Settings</span>
+          <span>{t('settings.settings')}</span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => logout()}>

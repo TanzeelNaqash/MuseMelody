@@ -244,10 +244,7 @@ export function SearchModal({ isOpen, onClose, onSelectResult }: SearchModalProp
 
                 {/* Recent Searches */}
                 <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <Clock className="h-5 w-5" />
-                    {t("search.recentSearches")}
-                  </h3>
+                 
                   <div className="space-y-4">
   <div className="flex items-center justify-between">
     <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">

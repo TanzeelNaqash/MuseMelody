@@ -79,6 +79,7 @@
     "unlike": "取消喜欢",
     "duration": "时长",
     "video": "视频"
+
   },
   "library": {
     "title": "你的音乐库",
@@ -86,7 +87,25 @@
     "localFiles": "本地文件",
     "downloads": "下载",
     "empty": "你的音乐库是空的",
-    "startAdding": "开始添加音乐以在此处查看"
+    "startAdding": "开始添加音乐以在此处查看",
+    "requiresAccount": "访问音乐库需要一个账户。登录以保存播放列表并管理你上传的音乐。",
+    "signInToAccess": "登录以访问音乐库"
+  },
+  "history": {
+    "requiresAccount": "访问历史需要一个账户。登录以跟踪你的收听历史并继续你离开的地方。",
+    "signInToAccess": "登录以访问历史"
+  },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب",
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
+  },
+  "createPlaylist": {
+    "requiresAccount": "创建播放列表需要一个账户。登录以创建播放列表。",
+    "signInToAccess": "登录以访问播放列表"
   },
   "playlist": {
     "createNew": "创建新播放列表",
@@ -111,7 +130,9 @@
     "maxSize": "最大文件大小：50MB",
     "uploading": "上传中...",
     "uploadSuccess": "上传成功",
-    "uploadError": "上传失败"
+    "uploadError": "上传失败",
+    "requiresAccount": "你需要一个账户才能上传音乐。",
+    "signInToAccess": "登录以访问上传"
   },
   "auth": {
     "signIn": "登录",

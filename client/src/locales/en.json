@@ -36,6 +36,14 @@
     "queue": "Queue",
     "lyrics": "Lyrics"
   },
+  "profile": {
+    "profile": "Profile",
+    "editProfile": "EditProfile",
+    "editProfileButton": "EditProfileButton",
+    "signOutButton": "SignOutButton",
+    "guestUser": "GuestUser",
+    "user": "User"
+  },
   "home": {
     "title": "Find Your Music",
     "subtitle": "Discover millions of songs from YouTube",
@@ -131,7 +139,16 @@
     "maxSize": "Max file size: 50MB",
     "uploading": "Uploading...",
     "uploadSuccess": "Upload successful",
-    "uploadError": "Upload failed"
+    "uploadError": "Upload failed",
+    "requiresAccount": "You need an account to upload music."
+  },
+  "history": {
+    "requiresAccount": "History access requires an account. Sign in to keep track of your listening history and pick up where you left off.",
+    "signInToAccess": "Sign In to Access History"
+  },
+  "createPlaylist": {
+    "requiresAccount": "Playlist creation requires an account. Sign in to create playlists.",
+    "signInToAccess": "Sign In to Access Playlists"
   },
   "auth": {
     "signIn": "Sign In",
@@ -195,6 +212,7 @@
   },
   "settings": {
     "settings": "Settings",
+    "settingsDescription": "Manage your account settings and preferences",
     "language": "Language",
     "theme": "Theme",
     "light": "Light",
@@ -209,9 +227,41 @@
     "enableNotifications": "Enable Notifications",
     "about": "About",
     "version": "Version",
+    "versionDesc": "Current application version",
     "privacy": "Privacy Policy",
-    "terms": "Terms of Service"
+    "privacyDesc": "Read our privacy policy to understand how we handle your data",
+    "viewPrivacy": "View Privacy Policy",
+    "terms": "Terms of Service",
+    "termsDesc": "Read our terms of service and user agreement",
+    "viewTerms": "View Terms",
+    "dataManagement": "Data Management",
+    "dataManagementDesc": "Manage your listening history and user data",
+    "clearHistory": "Clear History",
+    "clearHistoryDesc": "Delete all your listening history",
+    "clearHistoryConfirm": "Clear Listening History?",
+    "clearHistoryConfirmDesc": "This will permanently delete all your listening history. This action cannot be undone.",
+    "clear": "Clear",
+    "resetData": "Reset All Data",
+    "resetDataDesc": "Clear all your data including history, playlists, and uploads",
+    "resetDataConfirm": "Reset All Data?",
+    "resetDataConfirmDesc": "This will permanently delete all your data including listening history, playlists, and uploaded files. This action cannot be undone.",
+    "reset": "Reset",
+    "historyCleared": "History Cleared",
+    "historyClearedDesc": "Your listening history has been cleared successfully",
+    "historyClearError": "Failed to clear history. Please try again.",
+    "dataReset": "Data Reset",
+    "dataResetDesc": "Your data has been reset successfully",
+    "resetError": "Failed to reset data. Please try again.",
+    "error": "Error",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "clearing": "Clearing...",
+    "resetting": "Resetting...",
+    "view": "View",
+    "legalAndInfo": "Legal & Information",
+    "legalAndInfoDesc": "Legal documents and application information"
   },
+  
   "languages": {
       "en": "English",
       "es": "Español",

@@ -10,6 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { useTranslation } from "react-i18next";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { LogIn } from "lucide-react";
 
 export default function CreatePlaylist() {
   const [, navigate] = useLocation();
@@ -18,6 +21,12 @@ export default function CreatePlaylist() {
   const [isPublic, setIsPublic] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { t } = useTranslation();
+
+  // Guest Check
+  const userStr = localStorage.getItem("auth_user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isGuest = user?.id === "guest";
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -54,6 +63,36 @@ export default function CreatePlaylist() {
       });
     },
   });
+
+  if (isGuest) {
+    return (
+      <div className="min-h-screen pb-32 px-6 pt-8">
+        <div className="max-w-2xl mx-auto">
+          <h1 className="text-3xl font-bold text-foreground mb-8">Create Playlist</h1>
+          <Card className="p-12 text-center border-dashed">
+            <Alert className="mb-6 border-none bg-transparent shadow-none">
+              <div className="flex justify-center mb-4">
+                <LogIn className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <AlertDescription className="text-lg text-muted-foreground">
+                {t('createPlaylist.requiresAccount') || "You need an account to create playlists."}
+              </AlertDescription>
+            </Alert>
+            <Button 
+              onClick={() => {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('auth_user');
+                window.location.reload();
+              }}
+              className="w-full max-w-sm"
+            >
+              {t('auth.signIn') || "Sign In"}
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

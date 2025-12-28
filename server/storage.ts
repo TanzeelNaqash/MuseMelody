@@ -40,6 +40,7 @@ export interface IStorage {
   // Listening history operations
   addToHistory(history: InsertListeningHistory): Promise<ListeningHistory>;
   getHistory(userId: string, limit?: number): Promise<ListeningHistory[]>;
+  clearHistory(userId: string): Promise<void>;
   
   // Uploaded files operations
   getUploadedFiles(userId: string): Promise<UploadedFile[]>;
@@ -160,6 +161,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(listeningHistory.userId, userId))
       .orderBy(desc(listeningHistory.playedAt))
       .limit(limit);
+  }
+
+  async clearHistory(userId: string): Promise<void> {
+    await db.delete(listeningHistory).where(eq(listeningHistory.userId, userId));
   }
 
   // Uploaded files operations

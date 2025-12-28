@@ -108,21 +108,29 @@ export default function PlaylistDetail() {
           Back to Library
         </Button>
 
-        <div className="flex items-start gap-6 mb-8">
-          <div className="w-48 h-48 bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Play className="h-24 w-24 text-primary" />
+        <div className="flex items-start gap-4 sm:gap-6 mb-6 sm:mb-8">
+          <div className="w-32 h-32 sm:w-48 sm:h-48 bg-gradient-to-br from-primary/20 to-primary/5 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden">
+            {tracks.length > 0 && tracks[0]?.thumbnail ? (
+              <img
+                src={tracks[0].thumbnail}
+                alt={playlist.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Play className="h-12 w-12 sm:h-24 sm:w-24 text-primary" />
+            )}
           </div>
 
           <div className="flex-1">
-            <h1 className="text-4xl font-bold text-foreground mb-2" data-testid="text-playlist-name">
+            <h1 className="text-2xl sm:text-4xl font-bold text-foreground mb-2" data-testid="text-playlist-name">
               {playlist.name}
             </h1>
             {playlist.description && (
-              <p className="text-muted-foreground mb-4">
+              <p className="text-sm sm:text-base text-muted-foreground mb-3 sm:mb-4">
                 {playlist.description}
               </p>
             )}
-            <p className="text-sm text-muted-foreground mb-6">
+            <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6">
               {tracks.length} {tracks.length === 1 ? 'track' : 'tracks'}
             </p>
 

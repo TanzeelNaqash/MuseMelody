@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 import { AppSidebar } from "@/components/AppSidebar";
+import { BottomNavigation } from "@/components/BottomNavigation";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { PlayerBar } from "@/components/PlayerBar";
@@ -14,6 +15,8 @@ import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { useAuth } from "@/hooks/useAuth";
 import { UserMenu } from "@/components/UserMenu";
 import { useTranslation } from "react-i18next";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import "./lib/i18n";
 
 import Landing from "@/pages/Landing";
@@ -24,8 +27,10 @@ import CreatePlaylist from "@/pages/CreatePlaylist";
 import PlaylistDetail from "@/pages/PlaylistDetail";
 import Queue from "@/pages/Queue";
 import Lyrics from "@/pages/Lyrics";
+import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 import SearchModal from "@/pages/Search";
+import ProfilePage from "@/pages/ProfilePage";
 function Router() {
   const { isAuthenticated, isLoading, user, login } = useAuth();
   const { t } = useTranslation();
@@ -119,11 +124,28 @@ function Router() {
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1">
+        {/* Sidebar - hidden on mobile */}
+        <div className="hidden md:block">
+          <AppSidebar />
+        </div>
+        <div className="flex flex-col flex-1 w-full md:w-auto">
           <header className="flex items-center justify-between p-4 border-b border-border bg-background sticky top-0 z-40">
             <div className="flex items-center gap-2">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              {/* Sidebar trigger - hidden on mobile */}
+              <div className="hidden md:block">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+              </div>
+              {/* Mobile header title */}
+              <div className="md:hidden flex items-center">
+  <img
+    src="/musemelody.png"
+    alt="MuseMelody"
+    className="h-8 w-8 mr-2"
+  />
+  <h1 className="text-lg font-semibold text-lg font-semibold bg-clip-text text-transparent 
+               bg-gradient-to-r from-[#D4AF37] via-[#B8860B] to-[#8B5A2B]">MuseMelody</h1>
+</div>
+
             </div>
             <div className="flex items-center gap-3">
               <LanguageSwitcher />
@@ -131,7 +153,11 @@ function Router() {
               <UserMenu />
             </div>
           </header>
-          <main className="flex-1 overflow-auto">
+          <main className={cn(
+            "flex-1 overflow-auto",
+            // Add bottom padding on mobile to account for bottom navigation
+            "pb-20 md:pb-0"
+          )}>
             <Switch>
               <Route path="/" component={Home} />
               <Route path="/search" component={SearchModal} />
@@ -141,11 +167,15 @@ function Router() {
               <Route path="/playlist/:id" component={PlaylistDetail} />
               <Route path="/queue" component={Queue} />
               <Route path="/lyrics" component={Lyrics} />
+              <Route path="/settings" component={Settings} />
+              <Route path="/profile" component={ProfilePage} />
               <Route component={NotFound} />
             </Switch>
           </main>
         </div>
       </div>
+      {/* Bottom Navigation - only on mobile (hidden on desktop with CSS) */}
+      <BottomNavigation />
       <PlayerBar />
       <YouTubePlayer />
     </SidebarProvider>

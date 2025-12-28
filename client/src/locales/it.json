@@ -80,13 +80,31 @@
       "duration": "Durata",
       "video": "VIDEO"
     },
+    "history": {
+      "requiresAccount": "L'accesso all'istoria richiede un account. Accedi per salvare la tua cronologia di ascolto e continuare da dove hai lasciato.",
+      "signInToAccess": "Accedi per accedere all'istoria"
+    },
+    "createPlaylist": {
+      "requiresAccount": "La creazione di una playlist richiede un account. Accedi per creare playlist.",
+      "signInToAccess": "Accedi per accedere alle playlist"
+    },
     "library": {
       "title": "La tua libreria",
       "playlists": "Playlist",
       "localFiles": "File Locali",
       "downloads": "Download",
       "empty": "La tua libreria è vuota",
-      "startAdding": "Inizia ad aggiungere musica per vederla qui"
+      "startAdding": "Inizia ad aggiungere musica per vederla qui",
+      "requiresAccount": "Per accedere alla libreria è necessario un account. Accedi per salvare le playlist e gestire la tua musica.",
+      "signInToAccess": "Accedi per accedere alla libreria"
+    },
+    "profile": {
+      "profile": "الحساب",
+      "editProfile": "تعديل الحساب",
+      "editProfileButton": "تعديل الحساب",
+      "signOutButton": "تسجيل الخروج",
+      "guestUser": "ضيف",
+      "user": "المستخدم"
     },
     "playlist": {
       "createNew": "Crea nuova playlist",
@@ -111,7 +129,9 @@
       "maxSize": "Dimensione massima: 50MB",
       "uploading": "Caricamento...",
       "uploadSuccess": "Caricamento riuscito",
-      "uploadError": "Caricamento fallito"
+      "uploadError": "Caricamento fallito",
+      "requiresAccount": "Hai bisogno di un account per caricare musica.",
+      "signInToAccess": "Accedi per caricare musica"
     },
     "auth": {
       "signIn": "Accedi",

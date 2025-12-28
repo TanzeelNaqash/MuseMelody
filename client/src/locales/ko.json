@@ -86,7 +86,25 @@
     "localFiles": "로컬 파일",
     "downloads": "다운로드",
     "empty": "라이브러리가 비어있습니다",
-    "startAdding": "음악을 추가하여 여기에 표시하세요"
+    "startAdding": "음악을 추가하여 여기에 표시하세요",
+    "requiresAccount": "라이브러리에 접근하려면 계정이 필요합니다. 플레이리스트를 저장하고 업로드한 음악을 관리하려면 로그인하세요.",
+    "signInToAccess": "로그인하여 라이브러리에 접근"
+  },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب",
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
+  },
+  "history": {
+    "requiresAccount": "역사에 접근하려면 계정이 필요합니다. 리스닝 히스토리를 추적하고 멈춘 곳에서 계속하세요.",
+    "signInToAccess": "로그인하여 역사에 접근"
+  },
+  "createPlaylist": {
+    "requiresAccount": "플레이리스트 생성에는 계정이 필요합니다. 플레이리스트를 생성하려면 로그인하세요.",
+    "signInToAccess": "로그인하여 플레이리스트에 접근"
   },
   "playlist": {
     "createNew": "새 플레이리스트 만들기",
@@ -111,7 +129,9 @@
     "maxSize": "최대 파일 크기: 50MB",
     "uploading": "업로드 중...",
     "uploadSuccess": "업로드 성공",
-    "uploadError": "업로드 실패"
+    "uploadError": "업로드 실패",
+    "requiresAccount": "음악을 업로드하려면 계정이 필요합니다.",
+    "signInToAccess": "로그인하여 업로드에 접근"
   },
   "auth": {
     "signIn": "로그인",

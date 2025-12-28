@@ -3,6 +3,34 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
 const app = express();
+
+// CORS middleware - must be before other middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const origin = req.headers.origin;
+  // Allow requests from localhost:5173 (Vite dev server) and other configured origins
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    process.env.CLIENT_BASE_URL,
+    process.env.APP_URL,
+  ].filter(Boolean) as string[];
+  
+  if (origin && (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development')) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+  }
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+  
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -44,7 +72,8 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    // Do not rethrow; avoid crashing dev server under nodemon on handled route errors
+    console.error('Unhandled app error:', err);
   });
 
   // importantly only setup vite in development and after

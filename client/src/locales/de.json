@@ -80,14 +80,34 @@
     "duration": "Dauer",
     "video": "VIDEO"
   },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب", 
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
+  },
+  
   "library": {
     "title": "Deine Bibliothek",
     "playlists": "Wiedergabelisten",
     "localFiles": "Lokale Dateien",
     "downloads": "Downloads",
     "empty": "Deine Bibliothek ist leer",
-    "startAdding": "Beginne Musik hinzuzufügen, um sie hier zu sehen"
+    "startAdding": "Beginne Musik hinzuzufügen, um sie hier zu sehen",
+    "requiresAccount": "Zugriff auf Bibliothek erfordert ein Konto. Melde dich an, um Wiedergabelisten zu erstellen und deine Musik zu verwalten.",
+    "signInToAccess": "Anmelden, um Bibliothek zu ermöglichen"
   },
+  "history": {
+    "requiresAccount": "Zugriff auf History erfordert ein Konto. Melde dich an, um deine Hörhistorie zu verfolgen und dort weiterzuhören, wo du aufgehört hast.",
+    "signInToAccess": "Anmelden, um History zu ermöglichen"
+  },
+  "createPlaylist": {
+    "requiresAccount": "Erstellung einer Wiedergabeliste erfordert ein Konto. Melde dich an, um Wiedergabelisten zu erstellen.",
+    "signInToAccess": "Anmelden, um Wiedergabelisten zu ermöglichen"
+  },
+
   "playlist": {
     "createNew": "Neue Wiedergabeliste Erstellen",
     "playlistName": "Wiedergabelistenname",
@@ -111,7 +131,10 @@
     "maxSize": "Max. Dateigröße: 50MB",
     "uploading": "Hochladen...",
     "uploadSuccess": "Upload erfolgreich",
-    "uploadError": "Upload fehlgeschlagen"
+    "uploadError": "Upload fehlgeschlagen",
+    "requiresAccount": "Du benötigst ein Konto, um Musik hochzuladen.",
+    "signInToAccess": "Anmelden, um Upload zu ermöglichen"
+
   },
   "auth": {
     "signIn": "Anmelden",

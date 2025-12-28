@@ -19,19 +19,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Track } from "@shared/schema";
-import { VideoModal } from "@/components/VideoModal";
 import { useToast } from "@/hooks/use-toast";
 import { VPNNotification } from "@/components/VPNNotification";
 
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hlsRef = useRef<Hls | null>(null);
+  const audioHlsRef = useRef<Hls | null>(null);
   const streamInfoRef = useRef<ResolvedStream | null>(null);
-  const activeSourceRef = useRef<"audio" | "video">("audio");
   const fadeFrameRef = useRef<number | null>(null);
-  const detachVideoListenersRef = useRef<(() => void) | null>(null);
-  const [isVideoActive, setIsVideoActive] = useState(false);
   const [showVPNNotification, setShowVPNNotification] = useState(false);
   const [vpnNotificationMessage, setVpnNotificationMessage] = useState<string | undefined>();
   const { toast } = useToast();
@@ -58,7 +53,7 @@ export function AudioEngine() {
       videoModalOpen: state.videoModalOpen,
       setVideoModalOpen: state.setVideoModalOpen,
       setAudioElement: state.setAudioElement,
-      setVideoElement: state.setVideoElement,
+      videoElement: state.videoElement,
       pendingSeek: state.pendingSeek,
       clearPendingSeek: state.clearPendingSeek,
       isFullscreen: state.isFullscreen,
@@ -68,6 +63,7 @@ export function AudioEngine() {
       requestSeek: state.requestSeek,
       queue: state.queue,
       setCurrentTrack: state.setCurrentTrack,
+      isLoadingStream: state.isLoadingStream,
       setIsLoadingStream: state.setIsLoadingStream,
     })),
   );
@@ -94,7 +90,7 @@ export function AudioEngine() {
     videoModalOpen,
     setVideoModalOpen,
     setAudioElement,
-    setVideoElement,
+    videoElement,
     pendingSeek,
     clearPendingSeek,
     isFullscreen,
@@ -104,6 +100,7 @@ export function AudioEngine() {
     requestSeek,
     queue,
     setCurrentTrack,
+    isLoadingStream,
     setIsLoadingStream,
   } = storeSlice;
 
@@ -194,8 +191,8 @@ export function AudioEngine() {
   };
 
   const getActiveMediaElement = () => {
-    if (!audioOnlyMode && activeSourceRef.current === "video" && videoRef.current) {
-      return videoRef.current;
+    if (!audioOnlyMode && videoElement) {
+      return videoElement;
     }
     return audioRef.current;
   };
@@ -271,77 +268,13 @@ export function AudioEngine() {
       audio.removeEventListener("pause", onPause);
       audio.removeEventListener("ended", onEnded);
       audio.removeEventListener("error", onError);
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (audioHlsRef.current) {
+        audioHlsRef.current.destroy();
+        audioHlsRef.current = null;
       }
     };
   }, [playNext, setAudioElement, setCurrentTime, setDuration, setIsPlaying, requestSeek]);
 
-  const attachVideoListeners = (video: HTMLVideoElement) => {
-    const onLoadedMetadata = () => {
-      if (Number.isFinite(video.duration)) {
-        setDuration(Math.floor(video.duration));
-      }
-    };
-    const onTimeUpdate = () => setCurrentTime(Math.floor(video.currentTime));
-    const onPlay = () => setIsPlaying(true);
-    const onPause = () => {
-      if (!video.paused) return;
-      setIsPlaying(false);
-    };
-    const onEnded = () => {
-      const { isRepeat, currentTrack } = usePlayerStore.getState();
-      // If repeat is enabled, replay the current track
-      if (isRepeat && currentTrack) {
-        setCurrentTime(0);
-        requestSeek(0);
-        return;
-      }
-      // Otherwise, play next (which handles shuffle)
-      playNext();
-    };
-
-    video.addEventListener("loadedmetadata", onLoadedMetadata);
-    video.addEventListener("timeupdate", onTimeUpdate);
-    video.addEventListener("play", onPlay);
-    video.addEventListener("pause", onPause);
-    video.addEventListener("ended", onEnded);
-
-    detachVideoListenersRef.current = () => {
-      video.removeEventListener("loadedmetadata", onLoadedMetadata);
-      video.removeEventListener("timeupdate", onTimeUpdate);
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onEnded);
-    };
-  };
-
-  const assignVideoRef = (node: HTMLVideoElement | null) => {
-    if (videoRef.current && detachVideoListenersRef.current) {
-      detachVideoListenersRef.current();
-      detachVideoListenersRef.current = null;
-    }
-
-    videoRef.current = node;
-
-    if (node) {
-      setVideoElement(node);
-      attachVideoListeners(node);
-    } else {
-      setVideoElement(null);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (detachVideoListenersRef.current) {
-        detachVideoListenersRef.current();
-        detachVideoListenersRef.current = null;
-      }
-      setVideoElement(null);
-    };
-  }, [setVideoElement]);
 
   // Load source for current track
   useEffect(() => {
@@ -351,24 +284,10 @@ export function AudioEngine() {
     let cancelled = false;
 
     const cleanupHls = () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
+      if (audioHlsRef.current) {
+        audioHlsRef.current.destroy();
+        audioHlsRef.current = null;
       }
-    };
-
-    const cleanupVideo = () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      const videoEl = videoRef.current;
-      if (videoEl) {
-        videoEl.pause();
-        videoEl.removeAttribute("src");
-        videoEl.load();
-      }
-      setIsVideoActive(false);
     };
 
     const cancelFade = () => {
@@ -382,13 +301,6 @@ export function AudioEngine() {
       cancelFade();
       audio.muted = isMuted;
       audio.volume = normalizeVolume(volume);
-    };
-
-    const applyVideoVolume = () => {
-      const videoEl = videoRef.current;
-      if (!videoEl) return;
-      videoEl.muted = isMuted;
-      videoEl.volume = normalizeVolume(volume);
     };
 
     const fallbackToDirect = async (forceReload = false) => {
@@ -414,100 +326,24 @@ export function AudioEngine() {
       }
     };
 
-    const attachVideoStream = async (manifestUrl: string | null | undefined, directUrl?: string | null) => {
-      const videoEl = videoRef.current;
-      if (!videoEl) return false;
-      if (!manifestUrl && !directUrl) return false;
-
-      cleanupHls();
-
-      if (manifestUrl && Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-          backBufferLength: 60,
-        });
-        hlsRef.current = hls;
-        hls.on(Hls.Events.ERROR, async (_event, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                cleanupVideo();
-                await fallbackToDirect(true);
-                break;
-            }
-          }
-        });
-        hls.attachMedia(videoEl);
-        hls.loadSource(manifestUrl);
-        activeSourceRef.current = "video";
-        setIsVideoActive(true);
-        applyVideoVolume();
-        if (isPlaying) {
-          try {
-            await videoEl.play();
-          } catch {
-            // autoplay restriction
-          }
-        }
-        return true;
-      }
-
-      if (manifestUrl && videoEl.canPlayType("application/vnd.apple.mpegurl")) {
-        if (videoEl.src !== manifestUrl) {
-          videoEl.src = manifestUrl;
-          videoEl.load();
-        }
-        activeSourceRef.current = "video";
-        setIsVideoActive(true);
-        applyVideoVolume();
-        if (isPlaying) {
-          try {
-            await videoEl.play();
-          } catch {
-            // ignore autoplay restrictions
-          }
-        }
-        return true;
-      }
-
-      if (directUrl) {
-        videoEl.src = directUrl;
-        videoEl.load();
-        activeSourceRef.current = "video";
-        setIsVideoActive(true);
-        applyVideoVolume();
-        if (isPlaying) {
-          try {
-            await videoEl.play();
-          } catch {
-            // ignore autoplay restrictions
-          }
-        }
-        return true;
-      }
-
-      return false;
-    };
-
     const run = async () => {
       if (!currentTrack) {
         cleanupHls();
-        cleanupVideo();
         cancelFade();
         audio.removeAttribute("src");
         streamInfoRef.current = null;
         return;
       }
 
+      if (!audioOnlyMode) {
+        cleanupHls();
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+        return;
+      }
+
       cleanupHls();
-      cleanupVideo();
       audio.pause();
       audio.currentTime = 0;
       audio.removeAttribute("src");
@@ -558,18 +394,6 @@ export function AudioEngine() {
 
           const directUrl = info.proxiedUrl ?? info.rawUrl ?? info.url;
 
-          if (!audioOnlyMode && (info.manifestUrl || directUrl)) {
-            const attached = await attachVideoStream(info.manifestUrl, directUrl);
-            if (attached) {
-              audio.pause();
-              audio.src = directUrl ?? "";
-              return;
-            }
-          }
-
-          cleanupVideo();
-          activeSourceRef.current = "audio";
-
           if (info.manifestUrl) {
             if (Hls.isSupported()) {
               cleanupHls();
@@ -578,7 +402,7 @@ export function AudioEngine() {
                 lowLatencyMode: true,
                 backBufferLength: 60,
               });
-              hlsRef.current = hls;
+              audioHlsRef.current = hls;
               hls.on(Hls.Events.ERROR, async (_event, data) => {
                 if (data.fatal) {
                   console.error("HLS fatal error", data);
@@ -639,7 +463,6 @@ export function AudioEngine() {
         }
       } else if (currentTrack.source === "local" && currentTrack.fileUrl) {
         cleanupHls();
-        cleanupVideo();
         streamInfoRef.current = {
           url: currentTrack.fileUrl,
         };
@@ -647,8 +470,6 @@ export function AudioEngine() {
           audio.src = currentTrack.fileUrl;
           audio.load();
         }
-        activeSourceRef.current = "audio";
-        setIsVideoActive(false);
       }
 
       const media = getActiveMediaElement();
@@ -656,9 +477,7 @@ export function AudioEngine() {
       if (media) {
         const shouldFadeIn = isPlaying && !isMuted && media === audio;
         if (media === audio) {
-      applyVolume();
-        } else {
-          applyVideoVolume();
+          applyVolume();
         }
 
       if (shouldFadeIn) {
@@ -697,7 +516,6 @@ export function AudioEngine() {
       cancelled = true;
       cancelFade();
       cleanupHls();
-      cleanupVideo();
     };
   }, [audioOnlyMode, currentTrack, queue, playNext, setCurrentTime, setDuration, setIsPlaying]);
 
@@ -865,15 +683,7 @@ export function AudioEngine() {
             </Button>
           </div>
           <div className="relative z-10 flex h-full w-full flex-col gap-6 overflow-y-auto px-4 py-6 sm:px-6 lg:flex-row lg:items-center lg:justify-center lg:gap-10 lg:px-12">
-            <div className="mx-auto w/full max-w-3xl flex-1 overflow-hidden rounded-[32px] border border-white/15 bg-black/40 shadow-2xl">
-              {!audioOnlyMode && isVideoActive && (!videoModalOpen || isFullscreen) ? (
-                <video
-                  ref={assignVideoRef}
-                  className="aspect-video w-full object-cover"
-                  playsInline
-                  muted={isMuted}
-                />
-              ) : (
+            <div className="mx-auto w-full max-w-3xl flex-1 overflow-hidden rounded-[32px] border border-white/15 bg-black/40 shadow-2xl">
                 <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black/30 sm:aspect-[4/3]">
                   <img
                     src={currentTrack?.thumbnail || "/placeholder.svg"}
@@ -882,7 +692,6 @@ export function AudioEngine() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-transparent to-black/60" />
                 </div>
-              )}
             </div>
 
             <div className="mx-auto w-full max-w-xl flex flex-col gap-5 rounded-[32px] border border-white/10 bg-white/5 p-6 text-white shadow-xl backdrop-blur-xl sm:p-8">
@@ -1081,7 +890,20 @@ export function AudioEngine() {
                     size="sm"
                     variant="ghost"
                     className="rounded-full border border-white/15 bg-white/10 px-4 text-white hover:bg-white/20"
-                    onClick={toggleFullscreen}
+                    onClick={() => {
+                      toggleFullscreen();
+                      if (isFullscreen) {
+                        // When exiting fullscreen, close video modal if it was opened for fullscreen
+                        if (!audioOnlyMode) {
+                          setVideoModalOpen(false);
+                        }
+                      } else {
+                        // When entering fullscreen, open video modal if video is available
+                        if (!audioOnlyMode && currentTrack?.source === 'youtube') {
+                          setVideoModalOpen(true);
+                        }
+                      }
+                    }}
                   >
                     Exit
                   </Button>
@@ -1092,42 +914,14 @@ export function AudioEngine() {
         </motion.div>
       ) : null}
 
-      <VideoModal
-        open={videoModalOpen && !audioOnlyMode && !isFullscreen}
-        onOpenChange={(open) => {
-          if (open) {
-            if (audioOnlyMode) {
-              setAudioOnlyMode(false);
-            }
-            if (!videoModalOpen) {
-              setVideoModalOpen(true);
-            }
-          } else {
-            if (videoModalOpen) {
-              setVideoModalOpen(false);
-            }
-            if (!audioOnlyMode) {
-              setAudioOnlyMode(true);
-            }
-          }
-        }}
-        assignVideoRef={assignVideoRef}
-        isVideoActive={isVideoActive}
-        isMuted={isMuted}
-        thumbnail={currentTrack?.thumbnail}
-        title={currentTrack?.title}
-        artist={currentTrack?.artist}
-        onDisableVideo={() => {
-          setVideoModalOpen(false);
-          setAudioOnlyMode(true);
-        }}
-      />
-
+      {showVPNNotification && (
       <VPNNotification
+          key="vpn-notification"
         isOpen={showVPNNotification}
         onClose={() => setShowVPNNotification(false)}
         message={vpnNotificationMessage}
       />
+      )}
     </AnimatePresence>
   );
 }

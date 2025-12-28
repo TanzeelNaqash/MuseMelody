@@ -532,7 +532,7 @@ export function AuthModal({ isOpen, onClose, onAuthSuccess }: AuthModalProps) {
               onClick={() => {
                 const guestUser = {
                   id: 'guest',
-                  email: 'guest@aerogroove.com',
+                  email: 'guest@musemelody.com',
                   firstName: 'Guest',
                   lastName: 'User',
                   isEmailVerified: true

@@ -123,6 +123,22 @@
     "duration": "Duración",
     "createdBy": "Creado por"
   },
+  "history": {
+    "requiresAccount": "El acceso a la historia requiere una cuenta. Inicia sesión para guardar tu historial de reproducción y continuar donde lo dejaste.",
+    "signInToAccess": "Iniciar sesión para acceder a la historia"
+  },
+  "createPlaylist": {
+    "requiresAccount": "La creación de una lista de reproducción requiere una cuenta. Inicia sesión para crear listas de reproducción.",
+    "signInToAccess": "Iniciar sesión para acceder a las listas de reproducción"
+  },
+  "profile": {
+    "profile": "الحساب",
+    "editProfile": "تعديل الحساب",
+    "editProfileButton": "تعديل الحساب",
+    "signOutButton": "تسجيل الخروج",
+    "guestUser": "ضيف",
+    "user": "المستخدم"
+  },
   "upload": {
     "title": "Subir Música",
     "selectFiles": "Seleccionar Archivos de Audio",
@@ -131,7 +147,9 @@
     "maxSize": "Tamaño máximo: 50MB",
     "uploading": "Subiendo...",
     "uploadSuccess": "Subida exitosa",
-    "uploadError": "Error en la subida"
+    "uploadError": "Error en la subida",
+    "requiresAccount": "Necesitas una cuenta para subir música.",
+    "signInToAccess": "Iniciar sesión para subir música"
   },
   "auth": {
     "signIn": "Iniciar Sesión",

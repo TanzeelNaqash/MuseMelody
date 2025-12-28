@@ -5,16 +5,24 @@ import { SearchModal, type SearchResult } from "@/components/SearchModal";
 import { TrackCard } from "@/components/TrackCard";
 import { usePlayerStore } from "@/lib/playerStore";
 import type { Track } from "@shared/schema";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, LogIn } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useRef, useState } from "react";
 import { rememberStreamPreference } from "@/lib/streamPreferences";
+import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 
 export default function Home() {
   const { t } = useTranslation();
   const { setCurrentTrack, setQueue, addToQueue } = usePlayerStore();
   const searchBarRef = useRef<HTMLDivElement>(null);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+
+  // Guest Check
+  const userStr = localStorage.getItem("auth_user");
+  const user = userStr ? JSON.parse(userStr) : null;
+  const isGuest = user?.id === "guest";
 
   type StreamableTrack = Track & { streamSource?: 'piped' | 'invidious'; streamInstance?: string | null };
 
@@ -75,6 +83,7 @@ export default function Home() {
         return deduped;
       },
       staleTime: 1000 * 60,
+      enabled: !isGuest, // Disable history fetch for guest
     });
 
   const addToHistoryMutation = useMutation({
@@ -109,7 +118,7 @@ export default function Home() {
     }
     setCurrentTrack(track);
     setQueue([track]);
-    addToHistoryMutation.mutate(track);
+    if (!isGuest) addToHistoryMutation.mutate(track);
   };
 
   const handleResumeTrack = (track: StreamableTrack) => {
@@ -123,7 +132,7 @@ export default function Home() {
     } else {
       setQueue([track]);
     }
-    addToHistoryMutation.mutate(track);
+    if (!isGuest) addToHistoryMutation.mutate(track);
   };
 
   const handleSearchBarClick = () => {
@@ -138,7 +147,7 @@ export default function Home() {
     if (trending) {
       setQueue(trending);
     }
-    addToHistoryMutation.mutate(track);
+    if (!isGuest) addToHistoryMutation.mutate(track);
   };
 
   const handleAddToQueue = (track: Track) => {
@@ -254,7 +263,27 @@ export default function Home() {
         </div>
 
         <div className="space-y-6">
-          {loadingHistory ? (
+          {isGuest ? (
+            <div className="rounded-2xl border border-dashed border-border/60 bg-background/60 py-12 text-center shadow-[0_25px_65px_-40px_rgba(15,23,42,0.9)] backdrop-blur">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-muted/50">
+                <LogIn className="h-7 w-7 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">{t('history.requiresAccount') || "Account Required"}</h3>
+              <p className="text-muted-foreground mb-6 max-w-md mx-auto">{t('history.signInToAccess') || "Sign in to keep track of your listening history and pick up where you left off."}</p>
+              <Button 
+                onClick={() => {
+                  localStorage.removeItem('auth_token');
+                  localStorage.removeItem('auth_user');
+                  window.location.reload();
+                }}
+                variant="outline"
+                className="min-w-[140px]"
+              >
+               
+                {t('auth.signIn')}
+              </Button>
+            </div>
+          ) : loadingHistory ? (
             <div className="flex flex-col items-center justify-center rounded-2xl border border-border/30 bg-card/40 py-16 text-muted-foreground shadow-[0_25px_65px_-40px_rgba(15,23,42,0.9)] backdrop-blur">
               <Loader2 className="h-10 w-10 animate-spin" />
               <p className="mt-4">{t("common.loading")}</p>
