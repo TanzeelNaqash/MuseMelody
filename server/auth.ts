@@ -72,7 +72,7 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  // Send OTP email
+  // Send OTP email (REDESIGNED FOR DARK MODE + BRANDING)
   static async sendOTPEmail(email: string, code: string, type: 'email_verification' | 'password_reset'): Promise<void> {
     if (!transporter) {
       console.log(`[DEV] OTP for ${email}: ${code} (type: ${type})`);
@@ -83,20 +83,59 @@ export class AuthService {
       ? 'Verify your email - MuseMelody' 
       : 'Reset your password - MuseMelody';
     
+    // MuseMelody Brand Colors
+    const brandColor = '#D65D6A'; // Your primary pink/rose
+    const bgDark = '#09090b';     // App background
+    const bgCard = '#1e1e1e';     // Card background
+    const textMain = '#ffffff';
+    const textMuted = '#a1a1aa';
+
     const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #333;">${subject}</h2>
-        <p>Your verification code is:</p>
-        <div style="background: #f4f4f4; padding: 20px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0;">
-          ${code}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { margin: 0; padding: 0; background-color: ${bgDark}; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+          .container { max-width: 600px; margin: 0 auto; background-color: ${bgDark}; color: ${textMain}; }
+          .header { text-align: center; padding: 40px 0; }
+          .brand-text { font-size: 28px; font-weight: 800; color: ${brandColor}; text-transform: uppercase; letter-spacing: 1px; }
+          .content { background-color: ${bgCard}; padding: 40px; border-radius: 16px; margin: 0 20px; border: 1px solid #333; }
+          .otp-box { background-color: ${bgDark}; border: 2px dashed ${brandColor}; color: ${brandColor}; font-size: 36px; font-weight: bold; letter-spacing: 8px; text-align: center; padding: 24px; margin: 30px 0; border-radius: 12px; }
+          .footer { text-align: center; padding: 30px; color: ${textMuted}; font-size: 12px; }
+          h2 { margin-top: 0; font-weight: 600; }
+          p { color: #e4e4e7; line-height: 1.6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="brand-text">MuseMelody</div>
+          </div>
+          
+          <div class="content">
+            <h2>${type === 'email_verification' ? 'Verify Your Email' : 'Reset Password'}</h2>
+            <p>Hello,</p>
+            <p>Use the code below to complete your ${type === 'email_verification' ? 'verification' : 'password reset'} process. This code is valid for 10 minutes.</p>
+            
+            <div class="otp-box">
+              ${code}
+            </div>
+            
+            <p style="font-size: 14px; color: ${textMuted};">If you did not request this email, you can safely ignore it.</p>
+          </div>
+          
+          <div class="footer">
+            &copy; ${new Date().getFullYear()} MuseMelody. All rights reserved.<br>
+            Secure Music Streaming
+          </div>
         </div>
-        <p>This code will expire in 10 minutes.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      </div>
+      </body>
+      </html>
     `;
 
     await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+      from: `"MuseMelody" <${process.env.EMAIL_USER}>`,
       to: email,
       subject,
       html,

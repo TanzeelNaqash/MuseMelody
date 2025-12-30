@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import passport from "passport";
-import session from "express-session";
+// REMOVED: import session from "express-session"; <-- Not needed here anymore
 import { AuthService, type AuthUser } from "./auth";
 import { setupGoogleAuth, CLIENT_BASE_URL } from "./googleAuth";
 import { uma } from "./umaManager";
@@ -11,19 +11,9 @@ import { storage } from "./storage";
 import type { AuthenticateOptionsGoogle } from "passport-google-oauth20";
 
 export function setupAuthRoutes(app: Express) {
-  // Setup session for Google OAuth (only if not already set up)
-  if (!app.get('sessionMiddleware')) {
-    app.use(session({
-      secret: process.env.JWT_SECRET || 'your-secret-key',
-      resave: false,
-      saveUninitialized: false, // Don't create sessions until they're needed
-      cookie: {
-        secure: false, // Set to true in production with HTTPS
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-      }
-    }));
-    app.set('sessionMiddleware', true);
-  }
+  // --- REMOVED: Conflicting Session Middleware ---
+  // The session is now handled in server/index.ts using connect-pg-simple.
+  // We do NOT need app.use(session(...)) here.
 
   // Setup Google OAuth
   setupGoogleAuth();
@@ -32,10 +22,8 @@ export function setupAuthRoutes(app: Express) {
   
   // Only use passport.session() for OAuth routes that actually need sessions
   // For JWT-based auth and guest users, we don't need sessions, so skip passport.session()
-  // This prevents the session.regenerate error when sessions don't exist
   app.use((req: any, res: Response, next: NextFunction) => {
     // Only apply passport.session() to OAuth routes
-    // All other routes use JWT tokens and don't need sessions
     const isOAuthRoute = req.path?.startsWith('/api/auth/google');
     
     if (isOAuthRoute) {
@@ -43,16 +31,13 @@ export function setupAuthRoutes(app: Express) {
       const passportSession = passport.session();
       return passportSession(req, res, (err: any) => {
         if (err) {
-          // Log but don't crash on session errors
           console.warn('Passport session error (non-fatal):', err.message);
-          // Continue without session - OAuth will handle it
         }
         next();
       });
     }
     
     // For all other routes (JWT auth, guest users), skip passport.session()
-    // This prevents passport from trying to regenerate non-existent sessions
     next();
   });
 
@@ -195,7 +180,6 @@ export function setupAuthRoutes(app: Express) {
     app.get("/api/auth/google", passport.authenticate("google", googleAuthOptions));
 
     // Always redirect to CLIENT_BASE_URL (localhost:5173 in dev)
-    // The server (port 5001) handles verification, then redirects to client (port 5173)
     const getRedirectUrl = () => CLIENT_BASE_URL;
 
     const handleGoogleCallback = async (req: Request, res: Response) => {
@@ -207,7 +191,6 @@ export function setupAuthRoutes(app: Express) {
         }
         
         // Verify and store credentials on server (port 5001)
-        // User is already stored in database by passport strategy
         const token = AuthService.generateToken(user);
 
         // Redirect to client (localhost:5173) with token
@@ -216,11 +199,9 @@ export function setupAuthRoutes(app: Express) {
         console.error('Google OAuth callback error:', error);
         const errorMessage = error?.message || 'auth_failed';
         
-        // Handle database schema errors
         if (error?.code === '42P01' || errorMessage.includes('schema not initialized') || errorMessage.includes('migrations')) {
           return res.redirect(`${CLIENT_BASE_URL}/?error=database_schema_error`);
         }
-        // Handle certificate errors specifically
         if (errorMessage.includes('certificate') || errorMessage.includes('expired')) {
           console.error('SSL Certificate error - this may be a Node.js certificate issue');
           return res.redirect(`${CLIENT_BASE_URL}/?error=database_error`);
@@ -229,7 +210,7 @@ export function setupAuthRoutes(app: Express) {
       }
     };
 
-    // Handle both callback paths (in case Google OAuth console is configured differently)
+    // Handle both callback paths
     const passportAuth = passport.authenticate("google", { 
       session: false, // Don't use sessions, we'll use JWT tokens
     });
@@ -240,7 +221,6 @@ export function setupAuthRoutes(app: Express) {
         passportAuth(req, res, (err: any) => {
           if (err) {
             console.error('Passport authentication error:', err);
-            // Handle specific errors - redirect to client (localhost:5173)
             if (err?.message?.includes('Unauthorized') || err?.name === 'TokenError') {
               return res.redirect(`${CLIENT_BASE_URL}/?error=oauth_unauthorized`);
             }
@@ -264,7 +244,6 @@ export function setupAuthRoutes(app: Express) {
         passportAuth(req, res, (err: any) => {
           if (err) {
             console.error('Passport authentication error:', err);
-            // Handle specific errors - redirect to client (localhost:5173)
             if (err?.message?.includes('Unauthorized') || err?.name === 'TokenError') {
               return res.redirect(`${CLIENT_BASE_URL}/?error=oauth_unauthorized`);
             }
@@ -323,8 +302,7 @@ export function setupAuthRoutes(app: Express) {
   // Logout
   app.post('/api/auth/logout', (req: Request, res: Response) => {
     try {
-      // Clear passport user manually (avoid calling passport.logout() which tries to regenerate session)
-      // This prevents the session.regenerate error when sessions don't exist
+      // Clear passport user manually
       if ((req as any).user) {
         delete (req as any).user;
       }
@@ -337,7 +315,6 @@ export function setupAuthRoutes(app: Express) {
       // Destroy the express session if present
       if (req.session) {
         req.session.destroy((err) => {
-          // Clear the session cookie on the client
           res.clearCookie('connect.sid', { path: '/' });
           if (err) {
             console.error('Session destroy error during logout:', err);
@@ -346,14 +323,11 @@ export function setupAuthRoutes(app: Express) {
           return res.json({ message: 'Logged out successfully' });
         });
       } else {
-        // No session - still clear cookie and respond
-        // This handles JWT-only auth and guest users
         res.clearCookie('connect.sid', { path: '/' });
         return res.json({ message: 'Logged out successfully' });
       }
     } catch (error: any) {
       console.error('Logout error:', error);
-      // Still try to clear cookie and respond
       res.clearCookie('connect.sid', { path: '/' });
       return res.status(500).json({ message: 'Logout failed' });
     }
@@ -377,7 +351,7 @@ export function authenticateToken(req: Request, res: Response, next: any) {
 
   const user = AuthService.verifyToken(token);
   if (!user) {
-    return res.status(403).json({ message: 'Invalid or expired token' });
+    return res.status(430).json({ message: 'Invalid or expired token' });
   }
 
   (req as any).user = user;

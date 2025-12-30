@@ -7,3 +7,9 @@ dist
 build
 coverage
 .DS_Store
+.local/
+.replit
+replit.nix
+uploads
+DATABASE_SETUP.md
+attached_assets

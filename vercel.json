@@ -1,0 +1,8 @@
+{
+    "rewrites": [
+      {
+        "source": "/api/:path*",
+        "destination": "https://attribute-tulsa-marks-technological.trycloudflare.com/api/:path*"
+      }
+    ]
+  }

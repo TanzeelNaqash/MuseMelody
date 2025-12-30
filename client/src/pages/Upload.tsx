@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Upload as UploadIcon, Music, X, LogIn } from "lucide-react";
+import { Upload as UploadIcon, Music, X, LogIn, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+// import { apiRequest } from "@/lib/queryClient"; // Not used for file upload
 
 export default function Upload() {
   const [file, setFile] = useState<File | null>(null);
@@ -16,7 +17,9 @@ export default function Upload() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
-
+  
+  const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:5001";
+  
   // Guest Check
   const userStr = localStorage.getItem("auth_user");
   const user = userStr ? JSON.parse(userStr) : null;
@@ -28,16 +31,27 @@ export default function Upload() {
 
       const formData = new FormData();
       formData.append("file", file);
-      formData.append("title", title || file.name);
+      formData.append("title", title || file.name.replace(/\.[^/.]+$/, "")); // Auto-remove extension if empty
       formData.append("artist", artist || "Unknown Artist");
 
-      const response = await fetch("/api/upload", {
+      // --- FIX START: Add Authorization Header ---
+      const token = localStorage.getItem("auth_token");
+      
+      const response = await fetch(`${API_URL}/api/upload`, {
         method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            // IMPORTANT: Do NOT set Content-Type header. 
+            // The browser automatically sets 'multipart/form-data; boundary=...' 
+            // when it detects FormData in the body.
+        },
         body: formData,
       });
+      // --- FIX END ---
 
       if (!response.ok) {
-        throw new Error("Upload failed");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Upload failed");
       }
 
       return response.json();
@@ -50,6 +64,7 @@ export default function Upload() {
       setFile(null);
       setTitle("");
       setArtist("");
+      // Invalidate queries so the "Local Files" tab updates immediately
       queryClient.invalidateQueries({ queryKey: ["/api/uploads"] });
     },
     onError: (error: Error) => {
@@ -97,7 +112,7 @@ export default function Upload() {
       if (!selectedFile.type.startsWith("audio/")) {
         toast({
           title: "Invalid file",
-          description: "Please select an audio file",
+          description: "Please select an audio file (MP3, WAV, etc)",
           variant: "destructive",
         });
         return;
@@ -120,7 +135,7 @@ export default function Upload() {
             <Label htmlFor="file-upload" className="block mb-2">
               Music File
             </Label>
-            <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover-elevate transition-all">
+            <div className="border-2 border-dashed border-border rounded-lg p-12 text-center hover:bg-muted/50 transition-all">
               {file ? (
                 <div className="space-y-4">
                   <Music className="h-16 w-16 text-primary mx-auto" />
@@ -143,7 +158,7 @@ export default function Upload() {
               ) : (
                 <label
                   htmlFor="file-upload"
-                  className="cursor-pointer block"
+                  className="cursor-pointer block w-full h-full"
                 >
                   <UploadIcon className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
                   <p className="text-foreground font-medium mb-2">
@@ -198,7 +213,9 @@ export default function Upload() {
               data-testid="button-upload"
             >
               {uploadMutation.isPending ? (
-                <>Uploading...</>
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Uploading...
+                </>
               ) : (
                 <>
                   <UploadIcon className="h-4 w-4 mr-2" />

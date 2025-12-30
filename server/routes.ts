@@ -396,437 +396,437 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Featured playlist endpoint - get a single playlist by search query with tracks
-  app.get('/api/featured-playlist', authenticateWithGuest, async (req, res) => {
-    const query = String(req.query.query || '').trim();
-    if (!query) return res.status(400).json({ message: 'Query is required' });
+// Featured playlist endpoint - get a single playlist by search query with tracks
+app.get('/api/featured-playlist', authenticateWithGuest, async (req, res) => {
+  const query = String(req.query.query || '').trim();
+  if (!query) return res.status(400).json({ message: 'Query is required' });
 
-    const region = String(req.query.region || DEFAULT_REGION);
+  const region = String(req.query.region || DEFAULT_REGION);
 
-    try {
-      // Try Piped first (supports playlist search)
-      const pipedResult = await uma
-        .fetchJson<any>(
-          'piped',
+  try {
+    // Try Piped first (supports playlist search)
+    const pipedResult = await uma
+      .fetchJson<any>(
+        'piped',
+        (base) =>
+          `${base}/search?q=${encodeURIComponent(query)}&region=${encodeURIComponent(region)}&filter=playlists`,
+        { strictStatus: true },
+        {
+          cacheKey: `featured-playlist:${region}:${query}`,
+          ttlMs: 1000 * 60 * 30, // Cache for 30 minutes
+        },
+      )
+      .then(async (data) => {
+        const instance = uma.getLastSuccessfulInstance('piped');
+        if (instance) {
+          console.log('[FEATURED-PLAYLIST] Piped instance used:', instance);
+        }
+        const items: any[] = Array.isArray(data?.items) ? data.items : [];
+        const firstPlaylist = items[0];
+        
+        if (!firstPlaylist) {
+          return null;
+        }
+
+        // Extract playlist ID from URL - handle formats like:
+        // "/playlist?list=PLxxx" or "playlist?list=PLxxx" or just "PLxxx"
+        let playlistId: string | null = null;
+        if (typeof firstPlaylist?.url === 'string') {
+          const url = firstPlaylist.url;
+          // Try to extract from query parameter
+          const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+          if (listMatch) {
+            playlistId = listMatch[1];
+          } else {
+            // Fallback to last path segment
+            playlistId = url.split('/').pop() || null;
+            // Remove query string if present
+            if (playlistId && playlistId.includes('?')) {
+              playlistId = playlistId.split('?')[0];
+            }
+          }
+        } else if (firstPlaylist?.url) {
+          playlistId = String(firstPlaylist.url);
+        }
+        
+        if (!playlistId || playlistId.startsWith('channel-')) {
+          return {
+            id: playlistId || 'unknown',
+            title: firstPlaylist?.title ?? 'Unknown Playlist',
+            description: firstPlaylist?.description ?? '',
+            thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
+            uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
+            tracks: [],
+          };
+        }
+
+        // Fetch playlist tracks
+        try {
+          const playlistData = await uma.fetchJson<any>(
+            'piped',
+            (base) => `${base}/playlists/${encodeURIComponent(playlistId!)}`,
+            { strictStatus: false },
+            {
+              cacheKey: `playlist-tracks:${playlistId}`,
+              ttlMs: 1000 * 60 * 30,
+            },
+          );
+
+          // Get playlist info from the actual playlist data
+          const playlistTitle = playlistData?.name || playlistData?.title || firstPlaylist?.title || 'Unknown Playlist';
+          const playlistDescription = playlistData?.description || firstPlaylist?.description || '';
+          
+          // Get best quality playlist thumbnail
+          let playlistThumbnail: string | undefined = undefined;
+          if (playlistData?.thumbnailUrl) {
+            playlistThumbnail = playlistData.thumbnailUrl;
+          } else if (playlistData?.thumbnail) {
+            playlistThumbnail = playlistData.thumbnail;
+          } else if (Array.isArray(playlistData?.thumbnails)) {
+            const bestThumb = playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'maxres')
+              || playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'high')
+              || playlistData.thumbnails[0];
+            playlistThumbnail = bestThumb?.url || bestThumb;
+          } else if (firstPlaylist?.thumbnail) {
+            playlistThumbnail = firstPlaylist.thumbnail;
+          }
+          const playlistUploader = playlistData?.uploaderName || playlistData?.uploader || firstPlaylist?.uploaderName || 'Unknown';
+
+          const videos: any[] = Array.isArray(playlistData?.relatedStreams) ? playlistData.relatedStreams : [];
+          const tracks = videos.slice(0, 100).map((video) => {
+            // --- FIX 1: Extract clean Video ID ---
+            let videoId = video?.url;
+            if (typeof videoId === 'string' && videoId.includes('v=')) {
+                videoId = videoId.split('v=')[1].split('&')[0];
+            } else if (typeof videoId === 'string') {
+                videoId = videoId.split('/').pop();
+            }
+            // -------------------------------------
+            
+            // Get best quality thumbnail
+            let thumbnail: string | undefined = undefined;
+            if (video?.thumbnail) {
+              thumbnail = video.thumbnail;
+            } else if (Array.isArray(video?.thumbnails)) {
+              // Find best quality thumbnail
+              const bestThumb = video.thumbnails.find((thumb: any) => thumb?.quality === 'maxres') 
+                || video.thumbnails.find((thumb: any) => thumb?.quality === 'high') 
+                || video.thumbnails.find((thumb: any) => thumb?.quality === 'medium')
+                || video.thumbnails[0];
+              thumbnail = bestThumb?.url || bestThumb;
+            }
+            
+            return {
+              id: videoId,
+              youtubeId: videoId,
+              title: video?.title ?? 'Unknown Title',
+              artist: video?.uploaderName ?? video?.uploader ?? 'Unknown Artist',
+              thumbnail: thumbnail,
+              duration: typeof video?.duration === 'number' ? video.duration : (typeof video?.duration === 'string' ? parseInt(video.duration, 10) : 0),
+              source: 'youtube' as const,
+            };
+          });
+
+          // Fallback to first track thumbnail if available
+          if (!playlistThumbnail && tracks.length > 0 && tracks[0]?.thumbnail) {
+            playlistThumbnail = tracks[0].thumbnail;
+          }
+
+          return {
+            id: playlistId,
+            title: playlistTitle,
+            description: playlistDescription,
+            thumbnailUrl: playlistThumbnail || tracks[0]?.thumbnail || undefined,
+            uploaderName: playlistUploader,
+            tracks,
+          };
+        } catch (error) {
+          console.warn(`[FEATURED-PLAYLIST] Failed to fetch tracks for playlist ${playlistId}:`, error);
+          return {
+            id: playlistId,
+            title: firstPlaylist?.title ?? 'Unknown Playlist',
+            description: firstPlaylist?.description ?? '',
+            thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
+            uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
+            tracks: [],
+          };
+        }
+      })
+      .catch((error) => {
+        console.error('[FEATURED-PLAYLIST] Piped search failed:', error);
+        return null;
+      });
+
+    // Fallback to Invidious (search for videos and create playlist-like result)
+    if (!pipedResult) {
+      const invidiousResult = await uma
+        .fetchJson<any[]>(
+          'invidious',
           (base) =>
-            `${base}/search?q=${encodeURIComponent(query)}&region=${encodeURIComponent(region)}&filter=playlists`,
+            `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&region=${encodeURIComponent(region)}`,
           { strictStatus: true },
           {
-            cacheKey: `featured-playlist:${region}:${query}`,
-            ttlMs: 1000 * 60 * 30, // Cache for 30 minutes
+            cacheKey: `featured-playlist-invidious:${region}:${query}`,
+            ttlMs: 1000 * 60 * 30,
           },
         )
-        .then(async (data) => {
-          const instance = uma.getLastSuccessfulInstance('piped');
+        .then((items) => {
+          const instance = uma.getLastSuccessfulInstance('invidious');
           if (instance) {
-            console.log('[FEATURED-PLAYLIST] Piped instance used:', instance);
+            console.log('[FEATURED-PLAYLIST] Invidious instance used:', instance);
           }
-          const items: any[] = Array.isArray(data?.items) ? data.items : [];
-          const firstPlaylist = items[0];
           
-          if (!firstPlaylist) {
+          if (!items || items.length === 0) {
             return null;
           }
 
-          // Extract playlist ID from URL - handle formats like:
-          // "/playlist?list=PLxxx" or "playlist?list=PLxxx" or just "PLxxx"
-          let playlistId: string | null = null;
-          if (typeof firstPlaylist?.url === 'string') {
-            const url = firstPlaylist.url;
-            // Try to extract from query parameter
-            const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
-            if (listMatch) {
-              playlistId = listMatch[1];
-            } else {
-              // Fallback to last path segment
-              playlistId = url.split('/').pop() || null;
-              // Remove query string if present
-              if (playlistId && playlistId.includes('?')) {
-                playlistId = playlistId.split('?')[0];
-              }
-            }
-          } else if (firstPlaylist?.url) {
-            playlistId = String(firstPlaylist.url);
-          }
+          // Take first 50 videos and create a playlist
+          const videos = items.slice(0, 50);
+          const firstVideo = videos[0];
+          const thumbnail = Array.isArray(firstVideo?.videoThumbnails)
+            ? firstVideo.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
+              firstVideo.videoThumbnails[0]?.url
+            : undefined;
           
-          if (!playlistId || playlistId.startsWith('channel-')) {
-            return {
-              id: playlistId || 'unknown',
-              title: firstPlaylist?.title ?? 'Unknown Playlist',
-              description: firstPlaylist?.description ?? '',
-              thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
-              uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
-              tracks: [],
-            };
-          }
-
-          // Fetch playlist tracks
-          try {
-            const playlistData = await uma.fetchJson<any>(
-              'piped',
-              (base) => `${base}/playlists/${encodeURIComponent(playlistId!)}`,
-              { strictStatus: false },
-              {
-                cacheKey: `playlist-tracks:${playlistId}`,
-                ttlMs: 1000 * 60 * 30,
-              },
-            );
-
-            // Get playlist info from the actual playlist data
-            const playlistTitle = playlistData?.name || playlistData?.title || firstPlaylist?.title || 'Unknown Playlist';
-            const playlistDescription = playlistData?.description || firstPlaylist?.description || '';
+          const tracks = videos.map((v: any) => {
+            // Get best quality thumbnail
+            let thumbnail: string | undefined = undefined;
+            if (Array.isArray(v?.videoThumbnails)) {
+              const bestThumb = v.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')
+                || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'high')
+                || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')
+                || v.videoThumbnails[0];
+              thumbnail = bestThumb?.url;
+            }
             
-            // Get best quality playlist thumbnail
-            let playlistThumbnail: string | undefined = undefined;
-            if (playlistData?.thumbnailUrl) {
-              playlistThumbnail = playlistData.thumbnailUrl;
-            } else if (playlistData?.thumbnail) {
-              playlistThumbnail = playlistData.thumbnail;
-            } else if (Array.isArray(playlistData?.thumbnails)) {
-              const bestThumb = playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'maxres')
-                || playlistData.thumbnails.find((thumb: any) => thumb?.quality === 'high')
-                || playlistData.thumbnails[0];
-              playlistThumbnail = bestThumb?.url || bestThumb;
-            } else if (firstPlaylist?.thumbnail) {
-              playlistThumbnail = firstPlaylist.thumbnail;
-            }
-            const playlistUploader = playlistData?.uploaderName || playlistData?.uploader || firstPlaylist?.uploaderName || 'Unknown';
-
-            const videos: any[] = Array.isArray(playlistData?.relatedStreams) ? playlistData.relatedStreams : [];
-            const tracks = videos.slice(0, 100).map((video) => {
-              const videoId = video?.url?.split('/').pop() || video?.url;
-              
-              // Get best quality thumbnail
-              let thumbnail: string | undefined = undefined;
-              if (video?.thumbnail) {
-                thumbnail = video.thumbnail;
-              } else if (Array.isArray(video?.thumbnails)) {
-                // Find best quality thumbnail
-                const bestThumb = video.thumbnails.find((thumb: any) => thumb?.quality === 'maxres') 
-                  || video.thumbnails.find((thumb: any) => thumb?.quality === 'high') 
-                  || video.thumbnails.find((thumb: any) => thumb?.quality === 'medium')
-                  || video.thumbnails[0];
-                thumbnail = bestThumb?.url || bestThumb;
-              }
-              
-              return {
-                id: videoId,
-                youtubeId: videoId,
-                title: video?.title ?? 'Unknown Title',
-                artist: video?.uploaderName ?? video?.uploader ?? 'Unknown Artist',
-                thumbnail: thumbnail,
-                duration: typeof video?.duration === 'number' ? video.duration : (typeof video?.duration === 'string' ? parseInt(video.duration, 10) : 0),
-                source: 'youtube' as const,
-              };
-            });
-
-            // Fallback to first track thumbnail if available
-            if (!playlistThumbnail && tracks.length > 0 && tracks[0]?.thumbnail) {
-              playlistThumbnail = tracks[0].thumbnail;
-            }
-
             return {
-              id: playlistId,
-              title: playlistTitle,
-              description: playlistDescription,
-              thumbnailUrl: playlistThumbnail || tracks[0]?.thumbnail || undefined,
-              uploaderName: playlistUploader,
-              tracks,
+              id: v.videoId,
+              youtubeId: v.videoId,
+              title: v.title ?? 'Unknown Title',
+              artist: v.author ?? 'Unknown Artist',
+              thumbnail: thumbnail,
+              duration: v.lengthSeconds ?? 0,
+              source: 'youtube' as const,
             };
-          } catch (error) {
-            console.warn(`[FEATURED-PLAYLIST] Failed to fetch tracks for playlist ${playlistId}:`, error);
-            return {
-              id: playlistId,
-              title: firstPlaylist?.title ?? 'Unknown Playlist',
-              description: firstPlaylist?.description ?? '',
-              thumbnailUrl: firstPlaylist?.thumbnail ?? undefined,
-              uploaderName: firstPlaylist?.uploaderName ?? 'Unknown',
-              tracks: [],
-            };
-          }
+          });
+
+          return {
+            id: `search-${query}`,
+            title: query,
+            description: `${videos.length} tracks`,
+            thumbnailUrl: thumbnail || tracks[0]?.thumbnail,
+            uploaderName: firstVideo?.author ?? 'Unknown',
+            tracks,
+          };
         })
         .catch((error) => {
-          console.error('[FEATURED-PLAYLIST] Piped search failed:', error);
+          console.error('[FEATURED-PLAYLIST] Invidious search failed:', error);
           return null;
         });
 
-      // Fallback to Invidious (search for videos and create playlist-like result)
-      if (!pipedResult) {
-        const invidiousResult = await uma
-          .fetchJson<any[]>(
-            'invidious',
-            (base) =>
-              `${base}/api/v1/search?q=${encodeURIComponent(query)}&type=video&region=${encodeURIComponent(region)}`,
-            { strictStatus: true },
-            {
-              cacheKey: `featured-playlist-invidious:${region}:${query}`,
-              ttlMs: 1000 * 60 * 30,
-            },
-          )
-          .then((items) => {
-            const instance = uma.getLastSuccessfulInstance('invidious');
-            if (instance) {
-              console.log('[FEATURED-PLAYLIST] Invidious instance used:', instance);
-            }
-            
-            if (!items || items.length === 0) {
-              return null;
-            }
-
-            // Take first 50 videos and create a playlist
-            const videos = items.slice(0, 50);
-            const firstVideo = videos[0];
-            const thumbnail = Array.isArray(firstVideo?.videoThumbnails)
-              ? firstVideo.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
-                firstVideo.videoThumbnails[0]?.url
-              : undefined;
-            
-            const tracks = videos.map((v: any) => {
-              // Get best quality thumbnail
-              let thumbnail: string | undefined = undefined;
-              if (Array.isArray(v?.videoThumbnails)) {
-                const bestThumb = v.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')
-                  || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'high')
-                  || v.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')
-                  || v.videoThumbnails[0];
-                thumbnail = bestThumb?.url;
-              }
-              
-              return {
-                id: v.videoId,
-                youtubeId: v.videoId,
-                title: v.title ?? 'Unknown Title',
-                artist: v.author ?? 'Unknown Artist',
-                thumbnail: thumbnail,
-                duration: v.lengthSeconds ?? 0,
-                source: 'youtube' as const,
-              };
-            });
-
-            return {
-              id: `search-${query}`,
-              title: query,
-              description: `${videos.length} tracks`,
-              thumbnailUrl: thumbnail || tracks[0]?.thumbnail,
-              uploaderName: firstVideo?.author ?? 'Unknown',
-              tracks,
-            };
-          })
-          .catch((error) => {
-            console.error('[FEATURED-PLAYLIST] Invidious search failed:', error);
-            return null;
-          });
-
-        if (invidiousResult) {
-          return res.json(invidiousResult);
-        }
-      }
-
-      if (pipedResult) {
-        return res.json(pipedResult);
-      }
-
-      res.status(404).json({ message: 'Playlist not found' });
-    } catch (error) {
-      console.error('[FEATURED-PLAYLIST] Error:', error);
-      res.status(500).json({ message: 'Failed to fetch featured playlist' });
-    }
-  });
-
-  // Featured playlists endpoint - search for YouTube playlists by category with tracks
-  app.get('/api/featured-playlists', authenticateWithGuest, async (req, res) => {
-    const category = String(req.query.category || '').trim();
-    if (!category) return res.status(400).json({ message: 'Category is required' });
-
-    const region = String(req.query.region || DEFAULT_REGION);
-
-    // Featured playlist search queries
-    const categoryQueries: Record<string, string> = {
-      'hindi-essentials': 'hindi essentials playlist',
-      'hip-hop-essentials': 'hip hop essentials playlist',
-      'classical': 'classical music playlist',
-      'english': 'english hits playlist',
-      'punjabi': 'punjabi hits playlist',
-      'mix-hits': 'mix hits playlist',
-      'electronics': 'electronic music playlist',
-      'kpop': 'kpop playlist',
-    };
-
-    const searchQuery = categoryQueries[category] || category;
-
-    try {
-      // Try Piped first (supports playlist search)
-      const pipedResult = await uma
-        .fetchJson<any>(
-          'piped',
-          (base) =>
-            `${base}/search?q=${encodeURIComponent(searchQuery)}&region=${encodeURIComponent(region)}&filter=playlists`,
-          { strictStatus: true },
-          {
-            cacheKey: `featured-playlists:${region}:${category}`,
-            ttlMs: 1000 * 60 * 30, // Cache for 30 minutes
-          },
-        )
-        .then(async (data) => {
-          const instance = uma.getLastSuccessfulInstance('piped');
-          if (instance) {
-            console.log('[FEATURED-PLAYLISTS] Piped instance used:', instance);
-          }
-          const items: any[] = Array.isArray(data?.items) ? data.items : [];
-          const playlists = items.slice(0, 10);
-          
-          // Fetch tracks for each playlist
-          const playlistsWithTracks = await Promise.all(
-            playlists.map(async (item) => {
-              const playlistId = typeof item?.url === 'string'
-                ? item.url.split('/').pop() || item.url
-                : item?.url;
-              
-              if (!playlistId || playlistId.startsWith('channel-')) {
-                return {
-                  id: playlistId,
-                  title: item?.title ?? 'Unknown Playlist',
-                  description: item?.description ?? '',
-                  thumbnailUrl: item?.thumbnail ?? undefined,
-                  videoCount: item?.videos ?? 0,
-                  uploaderName: item?.uploaderName ?? 'Unknown',
-                  tracks: [],
-                };
-              }
-
-              // Fetch playlist tracks
-              try {
-                const playlistData = await uma.fetchJson<any>(
-                  'piped',
-                  (base) => `${base}/playlists/${encodeURIComponent(playlistId)}`,
-                  { strictStatus: false },
-                  {
-                    cacheKey: `playlist-tracks:${playlistId}`,
-                    ttlMs: 1000 * 60 * 30,
-                  },
-                );
-
-                const videos: any[] = Array.isArray(playlistData?.relatedStreams) ? playlistData.relatedStreams : [];
-                const tracks = videos.slice(0, 50).map((video) => {
-                  const videoId = video?.url?.split('/').pop() || video?.url;
-                  return {
-                    id: videoId,
-                    youtubeId: videoId,
-                    title: video?.title ?? 'Unknown Title',
-                    artist: video?.uploaderName ?? 'Unknown Artist',
-                    thumbnail: video?.thumbnail ?? undefined,
-                    duration: video?.duration ?? 0,
-                    source: 'youtube' as const,
-                  };
-                });
-
-                return {
-                  id: playlistId,
-                  title: item?.title ?? 'Unknown Playlist',
-                  description: item?.description ?? '',
-                  thumbnailUrl: item?.thumbnail ?? undefined,
-                  videoCount: tracks.length || (item?.videos ?? 0),
-                  uploaderName: item?.uploaderName ?? 'Unknown',
-                  tracks,
-                };
-              } catch (error) {
-                console.warn(`[FEATURED-PLAYLISTS] Failed to fetch tracks for playlist ${playlistId}:`, error);
-                return {
-                  id: playlistId,
-                  title: item?.title ?? 'Unknown Playlist',
-                  description: item?.description ?? '',
-                  thumbnailUrl: item?.thumbnail ?? undefined,
-                  videoCount: item?.videos ?? 0,
-                  uploaderName: item?.uploaderName ?? 'Unknown',
-                  tracks: [],
-                };
-              }
-            })
-          );
-
-          return playlistsWithTracks;
-        })
-        .catch((error) => {
-          console.error('[FEATURED-PLAYLISTS] Piped search failed:', error);
-          return [];
-        });
-
-      // Fallback to Invidious (search for videos and create playlist-like results)
-      if (pipedResult.length === 0) {
-        const invidiousResult = await uma
-          .fetchJson<any[]>(
-            'invidious',
-            (base) =>
-              `${base}/api/v1/search?q=${encodeURIComponent(searchQuery)}&type=video&region=${encodeURIComponent(region)}`,
-            { strictStatus: true },
-            {
-              cacheKey: `featured-playlists-invidious:${region}:${category}`,
-              ttlMs: 1000 * 60 * 30,
-            },
-          )
-          .then((items) => {
-            const instance = uma.getLastSuccessfulInstance('invidious');
-            if (instance) {
-              console.log('[FEATURED-PLAYLISTS] Invidious instance used:', instance);
-            }
-            // Group videos by channel and create playlist-like results
-            const channelMap = new Map<string, any[]>();
-            (items ?? []).forEach((item: any) => {
-              const channel = item?.authorId || 'unknown';
-              if (!channelMap.has(channel)) {
-                channelMap.set(channel, []);
-              }
-              channelMap.get(channel)!.push(item);
-            });
-
-            return Array.from(channelMap.entries())
-              .slice(0, 10)
-              .map(([channelId, videos]) => {
-                const firstVideo = videos[0];
-                const thumbnail = Array.isArray(firstVideo?.videoThumbnails)
-                  ? firstVideo.videoThumbnails.find((thumb: any) => thumb?.quality === 'maxres')?.url ||
-                    firstVideo.videoThumbnails[0]?.url
-                  : undefined;
-                
-                const tracks = videos.slice(0, 50).map((v: any) => ({
-                  id: v.videoId,
-                  youtubeId: v.videoId,
-                  title: v.title ?? 'Unknown Title',
-                  artist: v.author ?? 'Unknown Artist',
-                  thumbnail: Array.isArray(v?.videoThumbnails)
-                    ? v.videoThumbnails.find((thumb: any) => thumb?.quality === 'medium')?.url ||
-                      v.videoThumbnails[0]?.url
-                    : undefined,
-                  duration: v.lengthSeconds ?? 0,
-                  source: 'youtube' as const,
-                }));
-
-                return {
-                  id: `channel-${channelId}`,
-                  title: `${firstVideo?.author ?? 'Unknown'} - ${category}`,
-                  description: `${videos.length} videos from ${firstVideo?.author ?? 'Unknown'}`,
-                  thumbnailUrl: thumbnail || tracks[0]?.thumbnail,
-                  videoCount: tracks.length,
-                  uploaderName: firstVideo?.author ?? 'Unknown',
-                  tracks,
-                };
-              });
-          })
-          .catch((error) => {
-            console.error('[FEATURED-PLAYLISTS] Invidious search failed:', error);
-            return [];
-          });
-
+      if (invidiousResult) {
         return res.json(invidiousResult);
       }
-
-      res.json(pipedResult);
-    } catch (error) {
-      console.error('[FEATURED-PLAYLISTS] Error:', error);
-      res.status(500).json({ message: 'Failed to fetch featured playlists' });
     }
-  });
 
+    if (pipedResult) {
+      return res.json(pipedResult);
+    }
+
+    res.status(404).json({ message: 'Playlist not found' });
+  } catch (error) {
+    console.error('[FEATURED-PLAYLIST] Error:', error);
+    res.status(500).json({ message: 'Failed to fetch featured playlist' });
+  }
+});
+
+// Featured playlists endpoint - search for YouTube playlists by category with tracks
+
+// Featured playlists endpoint - get specific curated playlists by ID
+
+app.get('/api/featured-playlists', authenticateWithGuest, async (req, res) => {
+  const category = String(req.query.category || '').trim();
+  if (!category) return res.status(400).json({ message: 'Category is required' });
+
+  // Curated Playlist IDs provided by user
+  const curatedLists: Record<string, string[]> = {
+    'hits-2025': [
+      'RDCLAK5uy_n-bIDnwYZcryDfgspID25XdIijP4SVcYI', // Hits of 2025
+      'RDCLAK5uy_kt5FBmiCq0yT_X7QzsgBzT0QzoWZ-6UwI', // Hindi Hits 2025
+      'RDCLAK5uy_lYL2XiO10mD9CDlxBi7F1sMn_Fm3T_nQ8', // Punjabi Hits 2025
+      'RDCLAK5uy_mb31Ik1DbjkMgqx8nM6mBsICeTUui9t_E', // Telugu Hits 2025
+      'RDCLAK5uy_lOB8Innr31rihPB_otfUsnrLiYT_c66Rc'  // Tamil Hits 2025
+    ],
+    'india-hitlist': [
+      'RDCLAK5uy_n9Fbdw7e6ap-98_A-8JYBmPv64v-Uaq1g', // Bollywood Hitlist
+      'RDCLAK5uy_kuo_NioExeUmw07dFf8BzQ64DFFTlgE7Q', // Punjab Fire
+      'RDCLAK5uy_lj-zBExVYl7YN_NxXboDIh4A-wKGfgzNY', // I-Pop Hits
+      'RDCLAK5uy_mPBQePobkU9UZ100tOTfvTCdwWOHoiiPo'  // Tollywood Hitlist
+    ],
+    'international-hits-2025': [
+      'RDCLAK5uy_mmJfIyWtaX2HEYZlnsdRFW-5vUnodSa-U',
+      'RDCLAK5uy_nv-tvtQSHjI9sEnN3M6QgK3m5JeaE-6zE',
+      'RDCLAK5uy_n3hik1j1i-ShX3hNloQZk3OEgXHiZgif0',
+      'RDCLAK5uy_nT9IYNRNArmvrQVnYjSrZNLrM-NGxm1J0'
+    ],
+    'todays-global-hits': [
+      'RDCLAK5uy_kmPRjHDECIcuVwnKsx2Ng7fyNgFKWNJFs',
+      'RDCLAK5uy_lBGRuQnsG37Akr1CY4SxL0VWFbPrbO4gs',
+      'RDCLAK5uy_lBNUteBRencHzKelu5iDHwLF6mYqjL-JU',
+      'RDCLAK5uy_lJ8xZWiZj2GCw7MArjakb6b0zfvqwldps'
+    ]
+  };
+
+  const playlistIds = curatedLists[category] || [];
+
+  if (playlistIds.length === 0) {
+     return res.json([]);
+  }
+
+  try {
+    const results = await Promise.all(
+      playlistIds.map(async (playlistId) => {
+        try {
+          const playlistData = await uma.fetchJson<any>(
+            'piped',
+            (base) => `${base}/playlists/${encodeURIComponent(playlistId)}`,
+            { strictStatus: false },
+            {
+              cacheKey: `playlist-tracks:${playlistId}`,
+              ttlMs: 1000 * 60 * 60 * 24, 
+            },
+          );
+
+          if (!playlistData || (!playlistData.relatedStreams && !playlistData.tracks)) return null;
+
+          const videos: any[] = Array.isArray(playlistData.relatedStreams) ? playlistData.relatedStreams : [];
+          
+          const tracks = videos.slice(0, 50).map((video) => {
+             let videoId = video?.url;
+             if (typeof videoId === 'string') {
+                 if (videoId.includes('v=')) videoId = videoId.split('v=')[1].split('&')[0];
+                 else videoId = videoId.split('/').pop();
+             }
+             
+             // Extract best track thumbnail
+             let trackThumb = video?.thumbnail;
+             if (!trackThumb && Array.isArray(video?.thumbnails)) {
+                 trackThumb = video.thumbnails.find((t: any) => t.quality === 'maxres')?.url || video.thumbnails[0]?.url;
+             }
+
+             return {
+               id: videoId,
+               youtubeId: videoId,
+               title: video?.title ?? 'Unknown Title',
+               artist: video?.uploaderName ?? 'Unknown Artist',
+               thumbnail: trackThumb ?? undefined,
+               duration: video?.duration ?? 0,
+               source: 'youtube' as const,
+             };
+          });
+
+          // --- THUMBNAIL FIX ---
+          // Prioritize the first track's thumbnail because Playlist thumbnails for "Mixes" are often broken or low-res
+          let finalThumbnail = tracks.length > 0 ? tracks[0].thumbnail : undefined;
+          
+          // If first track has no thumb, try playlist thumb
+          if (!finalThumbnail) {
+             finalThumbnail = playlistData.thumbnailUrl || playlistData.thumbnail;
+          }
+
+          return {
+            id: playlistId,
+            title: playlistData.name || playlistData.title || 'Featured Playlist',
+            description: playlistData.description || '',
+            thumbnailUrl: finalThumbnail, // Used the robust thumbnail here
+            videoCount: tracks.length,
+            uploaderName: playlistData.uploaderName || 'YouTube Music',
+            tracks,
+          };
+        } catch (e) {
+            console.error(`Failed to fetch playlist ${playlistId}:`, e);
+            return null;
+        }
+      })
+    );
+
+    const validPlaylists = results.filter(p => p !== null);
+    res.json(validPlaylists);
+
+  } catch (error) {
+    console.error('[FEATURED-PLAYLISTS] Error:', error);
+    res.status(500).json({ message: 'Failed to fetch featured playlists' });
+  }
+});
+
+
+// Proxy endpoint to get a specific external playlist by ID
+app.get('/api/proxy/playlist/:id', async (req, res) => {
+  const playlistId = req.params.id;
+  if (!playlistId) return res.status(400).json({ message: 'Playlist ID is required' });
+
+  try {
+    const playlistData = await uma.fetchJson<any>(
+      'piped',
+      (base) => `${base}/playlists/${encodeURIComponent(playlistId)}`,
+      { strictStatus: false },
+      {
+        cacheKey: `playlist-detail:${playlistId}`,
+        ttlMs: 1000 * 60 * 60 * 24, // 24 hours
+      },
+    );
+
+    if (!playlistData || (!playlistData.relatedStreams && !playlistData.tracks)) {
+      return res.status(404).json({ message: 'Playlist not found' });
+    }
+
+    const videos: any[] = Array.isArray(playlistData.relatedStreams) ? playlistData.relatedStreams : [];
+    
+    const tracks = videos.slice(0, 100).map((video) => { // Increased limit for detail view
+        let videoId = video?.url;
+        if (typeof videoId === 'string') {
+            if (videoId.includes('v=')) videoId = videoId.split('v=')[1].split('&')[0];
+            else videoId = videoId.split('/').pop();
+        }
+        
+        let trackThumb = video?.thumbnail;
+        if (!trackThumb && Array.isArray(video?.thumbnails)) {
+            trackThumb = video.thumbnails.find((t: any) => t.quality === 'maxres')?.url || video.thumbnails[0]?.url;
+        }
+
+        return {
+          id: videoId,
+          youtubeId: videoId,
+          title: video?.title ?? 'Unknown Title',
+          artist: video?.uploaderName ?? 'Unknown Artist',
+          thumbnail: trackThumb ?? undefined,
+          duration: video?.duration ?? 0,
+          source: 'youtube' as const,
+        };
+    });
+
+    // Robust thumbnail logic
+    let finalThumbnail = tracks.length > 0 ? tracks[0].thumbnail : undefined;
+    if (!finalThumbnail) {
+        finalThumbnail = playlistData.thumbnailUrl || playlistData.thumbnail;
+    }
+
+    const result = {
+      id: playlistId,
+      title: playlistData.name || playlistData.title || 'Featured Playlist',
+      description: playlistData.description || '',
+      thumbnailUrl: finalThumbnail,
+      videoCount: tracks.length,
+      uploaderName: playlistData.uploaderName || 'YouTube Music',
+      tracks,
+    };
+
+    res.json(result);
+  } catch (error) {
+    console.error(`Failed to fetch playlist ${playlistId}:`, error);
+    res.status(500).json({ message: 'Failed to fetch playlist' });
+  }
+});
   // Trending catalog powered by Piped (with fallback search heuristic)
   app.get('/api/trending', authenticateWithGuest, async (req, res) => {
     const region = String(req.query.region || DEFAULT_REGION);

@@ -43,19 +43,22 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel className="text-base font-bold px-4 py-3">
-            <div className="flex items-center gap-2">
-              <img
-                src="/musemelody.png"
-                alt="MuseMelody"
-                className="h-8 w-8"
-              />
-              <h1 className="text-lg font-semibold bg-clip-text text-transparent 
-                           bg-gradient-to-r from-[#D4AF37] via-[#B8860B] to-[#8B5A2B]">
-                MuseMelody
-              </h1>
-            </div>
-          </SidebarGroupLabel>
+        <SidebarGroupLabel className="text-base font-bold px-4 py-3 mb-6 h-auto">
+  <div className="flex items-center gap-2">
+    <img
+      src="/logo.png"
+      alt="MuseMelody"
+      className="h-12 w-12 object-contain"
+    />
+    <h1 className="text-xl font-extrabold tracking-tight bg-clip-text text-transparent 
+                   bg-gradient-to-r 
+                   from-[#D65D6A] via-[#E68AA1] to-[#D65D6A]
+                   dark:from-[#FF9A9E] dark:via-[#FECFEF] dark:to-[#FF9A9E]
+                   drop-shadow-sm">
+      MuseMelody
+    </h1>
+  </div>
+</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => {

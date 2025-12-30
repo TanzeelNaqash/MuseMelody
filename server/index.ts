@@ -2,12 +2,16 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 
+// --- 1. NEW IMPORTS FOR SESSION FIX ---
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import pg from "pg"; 
+
 const app = express();
 
-// CORS middleware - must be before other middleware
+// --- 2. CORS MIDDLEWARE ---
 app.use((req: Request, res: Response, next: NextFunction) => {
   const origin = req.headers.origin;
-  // Allow requests from localhost:5173 (Vite dev server) and other configured origins
   const allowedOrigins = [
     'http://localhost:5173',
     'http://localhost:3000',
@@ -23,7 +27,6 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
   }
   
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
@@ -31,9 +34,33 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
+// --- 3. BODY PARSERS ---
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// --- 4. SESSION MIDDLEWARE (THE FIX) ---
+// This initializes the session store using your Database
+const PgSession = connectPgSimple(session);
+
+app.use(session({
+  store: new PgSession({
+    // It uses your existing DATABASE_URL from .env
+    conString: process.env.DATABASE_URL, 
+    createTableIfMissing: true, // Auto-creates the 'session' table
+  }),
+  secret: process.env.SESSION_SECRET || 'muse_melody_secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    httpOnly: true,
+    // Secure is true in production (required for https/tunnel)
+    secure: process.env.NODE_ENV === "production", 
+    sameSite: process.env.NODE_ENV === "production" ? 'lax' : 'lax',
+  }
+}));
+
+// --- 5. LOGGING MIDDLEWARE ---
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -64,32 +91,29 @@ app.use((req, res, next) => {
   next();
 });
 
+// --- 6. ROUTES & SERVER START ---
 (async () => {
+  // IMPORTANT: If 'registerRoutes' also has app.use(session), remove it from there!
   const server = await registerRoutes(app);
 
+  // Error Handling
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    // Do not rethrow; avoid crashing dev server under nodemon on handled route errors
     console.error('Unhandled app error:', err);
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Setup Vite (Dev) or Static Files (Prod)
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  // Start Server
+  const port = parseInt(process.env.PORT || '5001', 10); // Default to 5001 as you requested
   server.listen({
     port,
     host: "0.0.0.0",

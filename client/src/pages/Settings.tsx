@@ -30,8 +30,9 @@ import {
   Info,
   History,
   Settings as SettingsIcon,
-  ExternalLink,
+  ChevronRight,
   X,
+  FileSignature,
 } from "lucide-react";
 import { usePlayerStore } from "@/lib/playerStore";
 import { useLocation } from "wouter";
@@ -110,7 +111,7 @@ export default function Settings() {
     resetMutation.mutate(options);
   };
 
-  const appVersion = import.meta.env.VITE_APP_VERSION || "1.0.0";
+  const appVersion = import.meta.env.VITE_APP_VERSION;
 
   return (
     <div className="min-h-screen bg-background">
@@ -139,6 +140,7 @@ export default function Settings() {
       {/* Settings Content */}
       <div className="container mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-6 max-w-4xl">
         <div className="space-y-3 sm:space-y-4">
+          
           {/* Data Management Section */}
           <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow duration-200 bg-card">
             <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
@@ -175,14 +177,13 @@ export default function Settings() {
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                    <Button
-  variant="ghost"
-  size="sm"
-  className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto"
-  disabled={isClearingHistory}
-  onClick={(e) => e.stopPropagation()}
->
-
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto"
+                        disabled={isClearingHistory}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {isClearingHistory ? (
                           <>
                             <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1 sm:mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -194,33 +195,31 @@ export default function Settings() {
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent className="w-[calc(100%-2rem)] sm:max-w-md px-4 sm:px-6">
-  <AlertDialogHeader>
-    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-      <div className="p-1.5 sm:p-2 rounded-lg bg-destructive/10 shrink-0">
-        <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-      </div>
-      <AlertDialogTitle className="text-lg sm:text-xl">
-        {t("settings.clearHistoryConfirm")}
-      </AlertDialogTitle>
-    </div>
-    <AlertDialogDescription className="text-sm sm:text-base pt-2">
-      {t("settings.clearHistoryConfirmDesc")}
-    </AlertDialogDescription>
-  </AlertDialogHeader>
-
-  <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-    <AlertDialogCancel className="w-full sm:w-auto order-2 sm:order-1">
-      {t("settings.cancel")}
-    </AlertDialogCancel>
-    <AlertDialogAction
-      onClick={handleClearHistory}
-      className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90 order-1 sm:order-2"
-    >
-      {t("settings.confirm")}
-    </AlertDialogAction>
-  </AlertDialogFooter>
-</AlertDialogContent>
-
+                      <AlertDialogHeader>
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                          <div className="p-1.5 sm:p-2 rounded-lg bg-destructive/10 shrink-0">
+                            <Trash2 className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
+                          </div>
+                          <AlertDialogTitle className="text-lg sm:text-xl">
+                            {t("settings.clearHistoryConfirm")}
+                          </AlertDialogTitle>
+                        </div>
+                        <AlertDialogDescription className="text-sm sm:text-base pt-2">
+                          {t("settings.clearHistoryConfirmDesc")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel className="w-full sm:w-auto order-2 sm:order-1">
+                          {t("settings.cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleClearHistory}
+                          className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90 order-1 sm:order-2"
+                        >
+                          {t("settings.confirm")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
                   </AlertDialog>
                 </div>
               </div>
@@ -245,14 +244,13 @@ export default function Settings() {
                   </div>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                    <Button
-  variant="ghost"
-  size="sm"
-  className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto"
-  disabled={isResetting}
-  onClick={(e) => e.stopPropagation()}
->
-
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 sm:h-8 px-2 sm:px-3 text-xs sm:text-sm text-destructive hover:bg-destructive/10 hover:text-destructive ml-auto"
+                        disabled={isResetting}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         {isResetting ? (
                           <>
                             <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 mr-1 sm:mr-1.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -263,51 +261,38 @@ export default function Settings() {
                         )}
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent
-  className="
-    fixed left-1/2 top-1/2
-    -translate-x-1/2 -translate-y-1/2
-    w-[90vw] max-w-sm
-
-    animate-in fade-in-50 zoom-in-95
-    duration-200
-  "
->
-  <AlertDialogHeader>
-    <div className="flex items-center gap-2 sm:gap-3 mb-2">
-      <div className="p-1.5 sm:p-2 rounded-lg bg-destructive/10 shrink-0">
-        <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-      </div>
-      <AlertDialogTitle className="text-lg sm:text-xl">
-        {t("settings.resetDataConfirm")}
-      </AlertDialogTitle>
-    </div>
-
-    <AlertDialogDescription className="text-sm sm:text-base pt-2">
-      {t("settings.resetDataConfirmDesc")}
-    </AlertDialogDescription>
-  </AlertDialogHeader>
-
-  <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-    <AlertDialogCancel className="w-full sm:w-auto order-2 sm:order-1">
-      {t("settings.cancel")}
-    </AlertDialogCancel>
-
-    <AlertDialogAction
-      onClick={() =>
-        handleReset({
-          clearHistory: true,
-          clearPlaylists: true,
-          clearUploads: true,
-        })
-      }
-      className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90 order-1 sm:order-2"
-    >
-      {t("settings.confirm")}
-    </AlertDialogAction>
-  </AlertDialogFooter>
-</AlertDialogContent>
-
+                    <AlertDialogContent className="w-[calc(100%-2rem)] sm:max-w-md px-4 sm:px-6">
+                      <AlertDialogHeader>
+                        <div className="flex items-center gap-2 sm:gap-3 mb-2">
+                          <div className="p-1.5 sm:p-2 rounded-lg bg-destructive/10 shrink-0">
+                            <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
+                          </div>
+                          <AlertDialogTitle className="text-lg sm:text-xl">
+                            {t("settings.resetDataConfirm")}
+                          </AlertDialogTitle>
+                        </div>
+                        <AlertDialogDescription className="text-sm sm:text-base pt-2">
+                          {t("settings.resetDataConfirmDesc")}
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+                        <AlertDialogCancel className="w-full sm:w-auto order-2 sm:order-1">
+                          {t("settings.cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() =>
+                            handleReset({
+                              clearHistory: true,
+                              clearPlaylists: true,
+                              clearUploads: true,
+                            })
+                          }
+                          className="w-full sm:w-auto bg-destructive text-destructive-foreground hover:bg-destructive/90 order-1 sm:order-2"
+                        >
+                          {t("settings.confirm")}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
                   </AlertDialog>
                 </div>
               </div>
@@ -332,14 +317,13 @@ export default function Settings() {
               </div>
             </CardHeader>
             <CardContent className="pt-0 pb-3 sm:pb-4 space-y-1 px-0">
+              
               {/* Privacy Policy */}
-              <div className="group relative">
-                <a
-                  href="/privacy"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-muted/50 active:bg-muted transition-colors duration-150 cursor-pointer"
-                >
+              <div 
+                className="group relative cursor-pointer"
+                onClick={() => navigate("/privacy")}
+              >
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-muted/50 active:bg-muted transition-colors duration-150">
                   <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     <div className="p-1 sm:p-1.5 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors shrink-0">
                       <Shield className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
@@ -353,20 +337,18 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
-                  <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2" />
-                </a>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2" />
+                </div>
               </div>
 
               <div className="h-px bg-border mx-3 sm:mx-4"></div>
 
               {/* Terms of Service */}
-              <div className="group relative">
-                <a
-                  href="/terms"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-muted/50 active:bg-muted transition-colors duration-150 cursor-pointer"
-                >
+              <div 
+                className="group relative cursor-pointer"
+                onClick={() => navigate("/terms")}
+              >
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-muted/50 active:bg-muted transition-colors duration-150">
                   <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                     <div className="p-1 sm:p-1.5 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors shrink-0">
                       <FileText className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
@@ -380,22 +362,64 @@ export default function Settings() {
                       </p>
                     </div>
                   </div>
-                  <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2" />
-                </a>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2" />
+                </div>
               </div>
 
               <div className="h-px bg-border mx-3 sm:mx-4"></div>
 
+              {/* NEW: User Agreement */}
+              <div 
+                className="group relative cursor-pointer"
+                onClick={() => navigate("/UserAgreement")}
+              >
+                <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg hover:bg-muted/50 active:bg-muted transition-colors duration-150">
+                  <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                    <div className="p-1 sm:p-1.5 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors shrink-0">
+                      <FileSignature className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-foreground">
+                        User Agreement
+                      </p>
+                      <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:truncate">
+                        Usage rules and liability waiver
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0 ml-2" />
+                </div>
+              </div>
+
+              <div className="h-px bg-border mx-3 sm:mx-4"></div>
+              </CardContent>
+              </Card>
+
               {/* Version */}
-              <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg">
+              <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow duration-200 bg-card">
+            <CardHeader className="pb-2 sm:pb-3 px-3 sm:px-6">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 rounded-full bg-destructive/10 shrink-0">
+                  <History className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-base sm:text-lg font-medium text-foreground">
+                    {t("settings.version")}
+                  </CardTitle>
+                
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 pb-3 sm:pb-4 space-y-1 px-0">
+             
+
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 rounded-lg">
                 <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
                   <div className="p-1 sm:p-1.5 rounded-full bg-primary/10 shrink-0">
                     <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-foreground">
-                      {t("settings.version")}
-                    </p>
+                   
                     <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 line-clamp-2 sm:truncate">
                       {t("settings.versionDesc")}
                     </p>
@@ -405,6 +429,10 @@ export default function Settings() {
                   v{appVersion}
                 </div>
               </div>
+
+             
+           
+            
             </CardContent>
           </Card>
         </div>
@@ -412,4 +440,3 @@ export default function Settings() {
     </div>
   );
 }
-
